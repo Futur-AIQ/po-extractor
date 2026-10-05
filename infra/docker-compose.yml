@@ -1,0 +1,24 @@
+# App services for local development. Langfuse runs from its own compose stack (Step 0.3).
+name: po-extractor
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: po-redis
+    # Host port 6380 so the app Redis never collides with Langfuse's own Redis on 6379.
+    ports:
+      - "6380:6379"
+    # Append-only file persistence: queued jobs survive a container restart.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  redis-data:
