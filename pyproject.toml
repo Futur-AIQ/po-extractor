@@ -1,0 +1,63 @@
+[project]
+name = "po-extractor"
+version = "0.1.0"
+description = "Low-latency, high-accuracy purchase order extraction system"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "arq>=0.28.0",
+    "faker>=40.41.0",
+    "fastapi>=0.142.2",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "langfuse>=4.17.0",
+    "num2words>=0.5.14",
+    "orjson>=3.12.0",
+    "pydantic>=2",
+    "pydantic-settings>=2.15.0",
+    "pymupdf>=1.28.2",
+    "pymupdf4llm>=1.28.2",
+    "python-multipart>=0.0.32",
+    "redis>=5.3.1",
+    "sqlalchemy[asyncio]>=2.1.3",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "litellm[proxy]>=1.104.0",
+    "matplotlib>=3.11.2",
+    "pandas>=3.0.6",
+    "playwright>=1.63.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["data", "results", "infra/langfuse/vendor"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "ASYNC", # flake8-async: blocking calls in async code
+    "RUF",  # ruff-specific
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "schema", "datagen", "baseline", "eval", "bench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-ra"
