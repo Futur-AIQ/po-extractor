@@ -8,6 +8,7 @@
 data/
 data/**/*.pdf
 results/
+runs/
 
 # Vendored Langfuse checkout
 infra/langfuse/vendor/

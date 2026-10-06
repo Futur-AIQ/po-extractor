@@ -50,6 +50,7 @@ class Settings(BaseSettings):
 
     # Storage
     data_dir: Path = Path("data")
+    runs_dir: Path = Path("runs")  # extraction runs for evaluation (eval/run_format.py)
     sqlite_path: Path = Path("data/po_extractor.db")
 
     # Logging

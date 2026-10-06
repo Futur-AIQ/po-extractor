@@ -35,6 +35,7 @@ def test_defaults_load_without_env_file() -> None:
     assert s.langfuse_public_key == ""
     assert s.langfuse_secret_key.get_secret_value() == ""
     assert s.data_dir == Path("data")
+    assert s.runs_dir == Path("runs")
     assert s.sqlite_path == Path("data/po_extractor.db")
     assert s.log_level == "INFO"
 
