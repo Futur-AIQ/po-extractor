@@ -62,3 +62,7 @@ pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-ra"
+filterwarnings = [
+    # PyMuPDF's SWIG bindings warn on import (harmless; fixed upstream in newer SWIG).
+    "ignore:builtin type .* has no __module__ attribute:DeprecationWarning",
+]

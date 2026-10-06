@@ -1,4 +1,4 @@
-.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100 doctor
+.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100 doctor dataset
 
 COMPOSE := docker compose -f infra/docker-compose.yml
 
@@ -71,3 +71,7 @@ litellm-h100:  ## Start LiteLLM proxy on :4000 with the H100 config (vLLM via SS
 
 doctor:  ## Health check: .env, Docker, Redis, Langfuse, llama.cpp, LiteLLM + aliases
 	uv run python -m scripts.doctor
+
+dataset:  ## Build the synthetic dataset (60 POs, seed 42) into data/synthetic
+	uv run playwright install chromium
+	uv run python -m datagen.build --n 60 --seed 42 --out data/synthetic
