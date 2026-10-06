@@ -21,3 +21,6 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Generated Langfuse stack secrets (see infra/langfuse/README.md)
+infra/langfuse/langfuse.env

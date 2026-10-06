@@ -18,3 +18,7 @@ data lives in the `po-extractor_redis-data` volume, so queued jobs survive resta
 | `make down` | Stop and remove the container; the data volume is kept              |
 
 To wipe Redis data as well: `docker compose -f infra/docker-compose.yml down -v`.
+
+Tracing uses a self-hosted Langfuse (UI on **3000**), run separately with `make langfuse-up`,
+`make langfuse-logs` and `make langfuse-down`. Setup, ports and the one-time UI steps are in
+[`infra/langfuse/README.md`](infra/langfuse/README.md).

@@ -1,9 +1,16 @@
-.PHONY: help install test lint format up down logs ping
+.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs
 
 COMPOSE := docker compose -f infra/docker-compose.yml
 
+# Langfuse: official compose from the upstream repo, run unmodified (see infra/langfuse/README.md).
+LANGFUSE_REPO := https://github.com/langfuse/langfuse.git
+LANGFUSE_DIR := infra/langfuse/vendor
+LANGFUSE_ENV := infra/langfuse/langfuse.env
+LANGFUSE_COMPOSE := docker compose -p po-langfuse --project-directory $(LANGFUSE_DIR) \
+	-f $(LANGFUSE_DIR)/docker-compose.yml --env-file $(LANGFUSE_ENV)
+
 help:  ## Show available targets
-	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
 
 install:  ## Install runtime + dev dependencies into .venv
 	uv sync
@@ -30,3 +37,25 @@ logs:  ## Follow app service logs
 
 ping:  ## Check app Redis responds (expects PONG)
 	docker exec po-redis redis-cli ping
+
+$(LANGFUSE_DIR):
+	git clone --depth 1 $(LANGFUSE_REPO) $(LANGFUSE_DIR)
+
+$(LANGFUSE_ENV):
+	infra/langfuse/gen-env.sh > $(LANGFUSE_ENV)
+	@echo "Generated $(LANGFUSE_ENV) with random secrets"
+
+langfuse-up: | $(LANGFUSE_DIR) $(LANGFUSE_ENV)  ## Start self-hosted Langfuse (UI on :3000)
+	$(LANGFUSE_COMPOSE) up -d
+	@echo "Waiting for Langfuse at http://localhost:3000 (first start can take 2-3 min)..."
+	@for i in $$(seq 1 90); do \
+		curl -fsS -o /dev/null http://localhost:3000/api/public/health 2>/dev/null && \
+			echo "Langfuse is ready: http://localhost:3000" && exit 0; \
+		sleep 2; \
+	done; echo "Langfuse not ready after 3 min; check: make langfuse-logs"; exit 1
+
+langfuse-down:  ## Stop Langfuse (data volumes are kept)
+	$(LANGFUSE_COMPOSE) down
+
+langfuse-logs:  ## Follow Langfuse logs
+	$(LANGFUSE_COMPOSE) logs -f

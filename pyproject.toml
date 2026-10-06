@@ -53,7 +53,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "schema", "datagen", "baseline", "eval", "bench"]
+known-first-party = ["app", "schema", "datagen", "baseline", "eval", "bench", "scripts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
