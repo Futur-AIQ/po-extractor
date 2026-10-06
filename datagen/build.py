@@ -174,6 +174,9 @@ def truth_document(built: BuiltPO) -> dict[str, Any]:
             "rows_may_break": meta.rows_may_break,
             "inter_state": meta.inter_state,
             "vendor_industry": meta.vendor_industry,
+            "issuer_id": meta.issuer_id,
+            "issuer_frequent": meta.issuer_frequent,
+            "expected_duplicate": meta.expected_duplicate,
         },
     }
 

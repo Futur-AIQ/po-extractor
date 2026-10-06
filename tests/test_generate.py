@@ -3,6 +3,7 @@
 import json
 import re
 from collections import Counter
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -57,7 +58,7 @@ def test_line_numbers_and_count_range(dataset: list[GeneratedPO]) -> None:
     for g in dataset:
         numbers = [item.line_no for item in g.po.line_items]
         assert numbers == list(range(1, len(numbers) + 1))
-        assert 30 <= len(numbers) <= 60
+        assert 20 <= len(numbers) <= 80  # v1.1: 20-80 lines, mostly 30-50
 
 
 def test_item_codes_unique_within_po(dataset: list[GeneratedPO]) -> None:
@@ -83,7 +84,10 @@ def test_same_seed_same_dataset() -> None:
 
 def test_each_po_can_be_rebuilt_from_its_seed() -> None:
     for g in generate_many(5, seed=3):
-        assert generate_po(g.meta.seed) == g
+        # expected_duplicate is chosen across the dataset by generate_many, not per seed.
+        assert generate_po(g.meta.seed) == replace(
+            g, meta=replace(g.meta, expected_duplicate=False)
+        )
 
 
 # --- Knobs -------------------------------------------------------------------------------------
@@ -217,6 +221,11 @@ def _with(po: PurchaseOrder, line: int | None = None, **changes: object) -> Purc
     return po.model_copy(update={"line_items": items})
 
 
+def _other_char(char: str) -> str:
+    """A check character guaranteed to differ from `char`."""
+    return "1" if char == "0" else "0"
+
+
 def test_check_po_detects_errors(intra_po: PurchaseOrder) -> None:
     po = intra_po
     first = po.line_items[0]
@@ -229,7 +238,9 @@ def test_check_po_detects_errors(intra_po: PurchaseOrder) -> None:
         "grand_total": _with(po, grand_total=po.grand_total + 1),
         "round_off": _with(po, round_off=Decimal("0.75")),
         "amount_in_words": _with(po, amount_in_words="Rupees One Only"),
-        "invalid GSTIN": _with(po, vendor_gstin=po.vendor_gstin[:14] + "0"),
+        "invalid GSTIN": _with(
+            po, vendor_gstin=po.vendor_gstin[:14] + _other_char(po.vendor_gstin[14])
+        ),
         "PAN": _with(po, buyer_pan="AAAAA0000A"),
         "state_code": _with(po, buyer_state_code="01"),
         "place_of_supply": _with(po, place_of_supply="Ladakh (38)"),

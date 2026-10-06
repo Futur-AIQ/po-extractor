@@ -12,12 +12,16 @@ Rules the generator follows (PRD §6, §9.4):
 - grand_total = subtotal + taxes + freight + other - discount, rounded to whole rupees, with
   the difference in round_off (|round_off| <= 0.50)
 
-The ground truth is a PurchaseOrder. Things that only affect rendering (T&C page) are in
-GeneratedPO.meta.
+Who issues the PO (PRD §5): ~70% come from 30 frequent issuers (datagen/issuers.py), each
+with its own layout, PO-number format and item codes; the rest from one-off issuers. Vendors
+come from a fixed pool of 40 counterparties, so the mock ERP masters can know every party.
+
+The ground truth is a PurchaseOrder. Things that only affect rendering (layout, T&C page)
+and dataset facts (issuer, expected duplicate) are in GeneratedPO.meta.
 """
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -25,7 +29,17 @@ from faker import Faker
 
 from datagen import india
 from datagen.consistency import RUPEE, ZERO, round_money
-from datagen.india import Address, CatalogueItem, Company, State
+from datagen.india import CatalogueItem
+from datagen.issuers import (
+    Counterparty,
+    Issuer,
+    Unit,
+    counterparties,
+    frequent_issuers,
+    make_one_off_issuer,
+    serial_range,
+    vendor_code,
+)
 from schema.po_schema import LineItem, PurchaseOrder
 
 # =========================================================================================
@@ -37,8 +51,13 @@ from schema.po_schema import LineItem, PurchaseOrder
 class Knobs:
     """Difficulty knobs. Probabilities are per PO unless the name says per line."""
 
-    min_lines: int = 30
-    max_lines: int = 60
+    min_lines: int = 20
+    max_lines: int = 80
+    typical_min_lines: int = 30  # most POs have 30-50 lines (PRD §11.1)
+    typical_max_lines: int = 50
+    p_typical_line_count: float = 0.70  # else drawn from the full min..max range
+    frequent_issuer_share: float = 0.70  # POs from the 30 frequent issuers (PRD §5)
+    duplicate_po_count: int = 2  # POs whose number is pre-registered as already processed
     p_inter_state: float = 0.40
     p_multiline_description_per_line: float = 0.25  # append a spec/instruction clause
     p_discount_per_line: float = 0.20
@@ -60,6 +79,12 @@ class Knobs:
     def __post_init__(self) -> None:
         if not 1 <= self.min_lines <= self.max_lines:
             raise ValueError("need 1 <= min_lines <= max_lines")
+        if self.typical_min_lines > self.typical_max_lines:
+            raise ValueError("typical_min_lines must not exceed typical_max_lines")
+        if not 0 <= self.frequent_issuer_share <= 1:
+            raise ValueError("frequent_issuer_share must be in [0, 1]")
+        if self.duplicate_po_count < 0:
+            raise ValueError("duplicate_po_count must not be negative")
         if self.po_date_from > self.po_date_to:
             raise ValueError("po_date_from must not be after po_date_to")
         for name, value in vars(self).items():
@@ -76,6 +101,11 @@ class PoMeta:
     inter_state: bool
     has_tc_page: bool
     rows_may_break: bool = False
+    issuer_id: str = ""
+    issuer_frequent: bool = False
+    layout: str = ""  # the issuer's layout
+    issuer_date_style: str = ""  # metadata only: templates fix the date style per layout
+    expected_duplicate: bool = False  # PO number pre-registered as already processed
 
 
 @dataclass(frozen=True)
@@ -84,6 +114,7 @@ class GeneratedPO:
 
     po: PurchaseOrder
     meta: PoMeta
+    issuer: Issuer  # full profile, needed to build the ERP masters (not written to truth)
 
 
 # Optional header fields that the drop knob may remove. Everything else is either critical,
@@ -101,7 +132,7 @@ DROPPABLE_FIELDS = (
     "total_tax", "prepared_by", "approved_by",
 )  # fmt: skip
 
-# Vendors also sell from related categories, so a 60-line PO need not repeat items.
+# Vendors also sell from related categories, so a long PO need not repeat items.
 RELATED_INDUSTRIES = {
     "industrial_equipment": ("fasteners_hardware", "electrical"),
     "chemicals": ("industrial_equipment",),
@@ -110,7 +141,6 @@ RELATED_INDUSTRIES = {
     "it_office": ("electrical", "services"),
     "services": ("it_office", "industrial_equipment"),
 }
-BUYER_INDUSTRIES = ("industrial_equipment", "chemicals", "electrical")  # manufacturers
 
 DESCRIPTION_ADDENDA = (
     "Make: as per approved vendor list or equivalent",
@@ -149,25 +179,39 @@ def generate_po(seed: int, knobs: Knobs | None = None) -> GeneratedPO:
 
 
 def generate_many(n: int, seed: int, knobs: Knobs | None = None) -> list[GeneratedPO]:
-    """Generate `n` POs. PO i uses its own seed (in meta.seed), so it can be rebuilt alone."""
+    """Generate `n` POs. PO i uses its own seed (in meta.seed), so it can be rebuilt alone.
+
+    PO numbers are unique per issuer (a seed that repeats one is skipped), and
+    knobs.duplicate_po_count POs are marked as expected duplicates: their numbers go into the
+    masters' processed list, so validation must flag them.
+    """
+    knobs = knobs or Knobs()
     seeds = random.Random(seed)
-    return [generate_po(seeds.getrandbits(63), knobs) for _ in range(n)]
+    pos: list[GeneratedPO] = []
+    seen: set[tuple[str, str]] = set()
+    while len(pos) < n:
+        generated = generate_po(seeds.getrandbits(63), knobs)
+        key = (generated.meta.issuer_id, generated.po.po_number)
+        if key not in seen:
+            seen.add(key)
+            pos.append(generated)
+    return _mark_expected_duplicates(pos, knobs.duplicate_po_count, seed)
+
+
+def _mark_expected_duplicates(pos: list[GeneratedPO], count: int, seed: int) -> list[GeneratedPO]:
+    """Mark `count` POs (preferably from frequent issuers) as expected duplicates."""
+    frequent = [i for i, g in enumerate(pos) if g.meta.issuer_frequent]
+    candidates = frequent if len(frequent) >= count else list(range(len(pos)))
+    chosen = set(random.Random(f"duplicates:{seed}").sample(candidates, min(count, len(pos))))
+    return [
+        replace(g, meta=replace(g.meta, expected_duplicate=True)) if i in chosen else g
+        for i, g in enumerate(pos)
+    ]
 
 
 # =========================================================================================
 # Builder
 # =========================================================================================
-
-
-@dataclass
-class _Party:
-    """A business unit: company, location and GST registration."""
-
-    company: Company
-    state: State
-    address: Address
-    pan: str
-    gstin: str
 
 
 @dataclass
@@ -181,53 +225,55 @@ class _Builder:
     def build(self) -> GeneratedPO:
         rng, knobs = self.rng, self.knobs
 
-        buyer = self._new_party(rng.choice(BUYER_INDUSTRIES), india.pick_industrial_state(rng))
-        bill_to = buyer
+        issuer = self._issuer()
+        bill_to = issuer.main
         if rng.random() < knobs.p_bill_to_differs:
-            bill_to = self._other_unit(buyer)
+            bill_to = rng.choice(issuer.units[1:])  # e.g. head office pays for a plant
         ship_to = bill_to
         if rng.random() < knobs.p_ship_to_differs:
-            ship_to = self._other_unit(buyer)
+            ship_to = rng.choice([unit for unit in issuer.units if unit != bill_to])
 
         inter_state = rng.random() < knobs.p_inter_state
-        vendor_state = ship_to.state if not inter_state else self._other_state(ship_to.state)
-        vendor_industry = rng.choice(india.INDUSTRIES)
-        vendor = self._new_party(vendor_industry, vendor_state)
+        vendor = self._vendor(ship_to, inter_state)
 
         po_date = self._po_date()
-        self._document_fields(buyer, po_date)
-        self._party_fields(buyer, vendor, bill_to, ship_to)
+        self._document_fields(issuer, po_date)
+        self._party_fields(issuer, vendor, bill_to, ship_to)
         self._terms_fields(ship_to)
-        lines = self._line_items(vendor_industry, inter_state, po_date)
+        lines = self._line_items(issuer, vendor.company.industry, inter_state, po_date)
         self._totals_fields(lines)
         self._drop_optional_fields()
 
         po = PurchaseOrder.model_validate({**self.fields, "line_items": lines})
-        has_tc_page = rng.random() < knobs.p_tc_page
-        rows_may_break = rng.random() < knobs.p_rows_split_across_pages
-        meta = PoMeta(self.seed, vendor_industry, inter_state, has_tc_page, rows_may_break)
-        return GeneratedPO(po, meta)
+        meta = PoMeta(
+            seed=self.seed,
+            vendor_industry=vendor.company.industry,
+            inter_state=inter_state,
+            has_tc_page=rng.random() < knobs.p_tc_page,
+            rows_may_break=rng.random() < knobs.p_rows_split_across_pages,
+            issuer_id=issuer.id,
+            issuer_frequent=issuer.frequent,
+            layout=issuer.layout,
+            issuer_date_style=issuer.date_style,
+        )
+        return GeneratedPO(po, meta, issuer)
 
     # --- parties ---------------------------------------------------------------------------
 
-    def _new_party(self, industry: str, state: State) -> _Party:
-        company = india.generate_company(self.rng, industry)
-        pan = india.generate_pan(self.rng, company.pan_holder_type, company.name)
-        return self._unit(company, state, pan)
+    def _issuer(self) -> Issuer:
+        """A frequent issuer (knobs.frequent_issuer_share of POs) or a one-off issuer."""
+        if self.rng.random() < self.knobs.frequent_issuer_share:
+            return self.rng.choice(frequent_issuers())
+        return make_one_off_issuer(self.rng)
 
-    def _unit(self, company: Company, state: State, pan: str) -> _Party:
-        address = india.generate_address(self.rng, state)
-        return _Party(company, state, address, pan, india.generate_gstin(self.rng, state.code, pan))
-
-    def _other_unit(self, party: _Party) -> _Party:
-        """Another plant or office of the same company: same PAN, possibly another state."""
-        state = party.state if self.rng.random() < 0.5 else self._other_state(party.state)
-        return self._unit(party.company, state, party.pan)
-
-    def _other_state(self, state: State) -> State:
-        while (other := india.pick_industrial_state(self.rng)) == state:
-            pass
-        return other
+    def _vendor(self, ship_to: Unit, inter_state: bool) -> Counterparty:
+        """A pool vendor in the ship-to state (intra-state) or in another state (inter-state)."""
+        candidates = [
+            vendor
+            for vendor in counterparties()
+            if (vendor.unit.state == ship_to.state) != inter_state
+        ]
+        return self.rng.choice(candidates)
 
     # --- header sections -------------------------------------------------------------------
 
@@ -235,10 +281,12 @@ class _Builder:
         span = (self.knobs.po_date_to - self.knobs.po_date_from).days
         return self.knobs.po_date_from + timedelta(days=self.rng.randint(0, span))
 
-    def _document_fields(self, buyer: _Party, po_date: date) -> None:
+    def _document_fields(self, issuer: Issuer, po_date: date) -> None:
         rng, knobs = self.rng, self.knobs
         f = self.fields
-        f["po_number"] = _po_number(rng, buyer.company, po_date)
+        f["po_number"] = issuer.po_number(
+            po_date, rng.randint(*serial_range(issuer.po_number_style, historical=False))
+        )
         f["po_date"] = po_date
         if rng.random() < knobs.p_amendment:
             f["amendment_no"] = rng.choice(["1", "2", "Rev. 01", "A1", "Amendment 1"])
@@ -261,30 +309,32 @@ class _Builder:
         f["po_validity_date"] = po_date + timedelta(days=rng.randint(90, 365))
 
     def _party_fields(
-        self, buyer: _Party, vendor: _Party, bill_to: _Party, ship_to: _Party
+        self, issuer: Issuer, vendor: Counterparty, bill_to: Unit, ship_to: Unit
     ) -> None:
         f, fake = self.fields, self.fake
-        for prefix, party in (("buyer", buyer), ("vendor", vendor)):
-            contact = india.generate_contact(fake, party.company.domain)
-            f[f"{prefix}_name"] = party.company.name
-            f[f"{prefix}_address"] = party.address.one_line()
-            f[f"{prefix}_gstin"] = party.gstin
-            f[f"{prefix}_pan"] = party.pan
-            f[f"{prefix}_state"] = party.state.name
-            f[f"{prefix}_state_code"] = party.state.code
+        parties = (
+            ("buyer", issuer.company, issuer.pan, issuer.main),
+            ("vendor", vendor.company, vendor.pan, vendor.unit),
+        )
+        for prefix, company, pan, unit in parties:
+            contact = india.generate_contact(fake, company.domain)
+            f[f"{prefix}_name"] = company.name
+            f[f"{prefix}_address"] = unit.address.one_line()
+            f[f"{prefix}_gstin"] = unit.gstin
+            f[f"{prefix}_pan"] = pan
+            f[f"{prefix}_state"] = unit.state.name
+            f[f"{prefix}_state_code"] = unit.state.code
             f[f"{prefix}_contact_person"] = contact.name
             f[f"{prefix}_phone"] = contact.phone
             f[f"{prefix}_email"] = contact.email
-        f["vendor_code"] = self.rng.choice(
-            [f"V{self.rng.randint(10000, 99999)}", f"SUP-{self.rng.randint(100, 9999):04d}"]
-        )
-        for prefix, party in (("bill_to", bill_to), ("ship_to", ship_to)):
-            f[f"{prefix}_name"] = party.company.name
-            f[f"{prefix}_address"] = party.address.one_line()
-            f[f"{prefix}_gstin"] = party.gstin
-            f[f"{prefix}_state_code"] = party.state.code
+        f["vendor_code"] = vendor_code(issuer, vendor)
+        for prefix, unit in (("bill_to", bill_to), ("ship_to", ship_to)):
+            f[f"{prefix}_name"] = issuer.company.name
+            f[f"{prefix}_address"] = unit.address.one_line()
+            f[f"{prefix}_gstin"] = unit.gstin
+            f[f"{prefix}_state_code"] = unit.state.code
 
-    def _terms_fields(self, ship_to: _Party) -> None:
+    def _terms_fields(self, ship_to: Unit) -> None:
         rng, f = self.rng, self.fields
         state = ship_to.state
         f["place_of_supply"] = rng.choice(
@@ -304,27 +354,32 @@ class _Builder:
 
     # --- line items ------------------------------------------------------------------------
 
-    def _line_items(self, industry: str, inter_state: bool, po_date: date) -> list[LineItem]:
+    def _line_count(self) -> int:
+        """20-80 lines, most POs 30-50 (knobs; the typical range is clipped to min..max)."""
         rng, knobs = self.rng, self.knobs
-        count = rng.randint(knobs.min_lines, knobs.max_lines)
+        low = max(knobs.min_lines, knobs.typical_min_lines)
+        high = min(knobs.max_lines, knobs.typical_max_lines)
+        if low <= high and rng.random() < knobs.p_typical_line_count:
+            return rng.randint(low, high)
+        return rng.randint(knobs.min_lines, knobs.max_lines)
+
+    def _line_items(
+        self, issuer: Issuer, industry: str, inter_state: bool, po_date: date
+    ) -> list[LineItem]:
+        rng, knobs = self.rng, self.knobs
+        count = self._line_count()
         pool = india.items_for(industry)
         for related in RELATED_INDUSTRIES[industry]:
             pool += india.items_for(related)
-        chosen = rng.sample(pool, min(count, len(pool)))
-        chosen += rng.choices(pool, k=count - len(chosen))  # repeats only if the pool is small
+        if count > len(pool):  # a long PO: the vendor acts as a broad-line distributor
+            pool += [item for item in india.CATALOGUE if item not in pool]
+        chosen = rng.sample(pool, count)  # distinct items, so item codes are unique per PO
 
-        code_style = india.pick_item_code_style(rng)
         with_codes = rng.random() >= knobs.optional_drop_rate
         with_dates = rng.random() < knobs.p_line_delivery_dates
-        used_codes: set[str] = set()
-
         lines = []
         for line_no, item in enumerate(chosen, start=1):
-            code = None
-            if with_codes:
-                while (code := india.generate_item_code(rng, item, code_style)) in used_codes:
-                    pass
-                used_codes.add(code)
+            code = issuer.item_code(item) if with_codes else None
             delivery = po_date + timedelta(days=rng.randint(7, 120)) if with_dates else None
             lines.append(self._line(line_no, item, code, delivery, inter_state))
         return lines
@@ -435,32 +490,3 @@ def _quantity(rng: random.Random, item: CatalogueItem, rate: Decimal) -> Decimal
         return max(Decimal(1), raw.quantize(Decimal(1), rounding=ROUND_HALF_UP))
     step = Decimal(1) if rng.random() < 0.6 else Decimal("0.5")
     return max(step, (raw / step).quantize(Decimal(1), rounding=ROUND_HALF_UP) * step)
-
-
-def _financial_year(day: date) -> str:
-    """Indian financial year (April-March) as '2026-27'."""
-    start = day.year if day.month >= 4 else day.year - 1
-    return f"{start}-{(start + 1) % 100:02d}"
-
-
-def _initials(company: Company) -> str:
-    """Up to three capital letters from the meaningful words of a company name."""
-    skip = {"pvt.", "ltd.", "private", "limited", "llp", "&", "co."}
-    words = [w for w in company.name.split() if w.lower() not in skip]
-    return "".join(w[0] for w in words).upper()[:3].ljust(3, "X")
-
-
-def _po_number(rng: random.Random, buyer: Company, po_date: date) -> str:
-    """PO number in one of the formats real buyers use (the style varies by buyer)."""
-    fy = _financial_year(po_date)
-    n = rng.randint(1, 99_999)
-    style = rng.choice(["fy_slash", "sap", "dept", "unit_fy", "yearmonth"])
-    if style == "fy_slash":
-        return f"PO/{fy}/{n:05d}"  # PO/2026-27/00457
-    if style == "sap":
-        return f"45000{n:05d}"  # 4500012345
-    if style == "dept":
-        return f"{_initials(buyer)}-PUR-{po_date:%y}-{n % 10_000:04d}"  # GMM-PUR-26-1182
-    if style == "unit_fy":
-        return f"{_initials(buyer)}/PO/{n % 10_000}/{fy[2:]}"  # SGE/PO/1182/26-27
-    return f"PO-{po_date:%Y%m}-{n % 10_000:04d}"  # PO-202603-0457
