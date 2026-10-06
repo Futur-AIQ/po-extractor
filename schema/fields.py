@@ -4,7 +4,7 @@ The section lists mirror PRD §6.1. Tests check that they cover the PurchaseOrde
 fields exactly once, so this module and po_schema.py cannot drift apart.
 """
 
-from schema.po_schema import LineItem
+from schema.po_schema import LineItem, PurchaseOrder
 
 DOCUMENT_FIELDS = [
     "po_number",
@@ -102,3 +102,22 @@ CRITICAL_FIELDS = CRITICAL_HEADER_FIELDS | CRITICAL_LINE_ITEM_FIELDS
 
 # Column order of a compact line-item row: the LineItem field order (PRD §6.2).
 LINE_ITEM_COLUMNS: list[str] = list(LineItem.model_fields)
+
+# --- v1.1 LLM output contract (PRD §6.3) --------------------------------------------------
+# Derivable values are never requested from the model; code computes them later (Step 3.6)
+# from taxable value, GST rate and supply type. Printed values that arithmetic checks compare
+# against (taxable_value, line_total, tax totals, grand_total) are still extracted.
+COMPUTED_HEADER_FIELDS = {"total_tax"}
+COMPUTED_LINE_ITEM_FIELDS = {"cgst_amount", "sgst_amount", "igst_amount"}
+COMPUTED_FIELDS = COMPUTED_HEADER_FIELDS | COMPUTED_LINE_ITEM_FIELDS
+
+# All 58 header fields minus computed ones, in PRD §6.1 order (one header call asks for all).
+HEADER_FIELDS: list[str] = [name for name in PurchaseOrder.model_fields if name != "line_items"]
+HEADER_FIELDS_FOR_LLM: list[str] = [
+    name for name in HEADER_FIELDS if name not in COMPUTED_HEADER_FIELDS
+]
+
+# Compact row columns the model fills: LINE_ITEM_COLUMNS minus computed ones, same order.
+LLM_LINE_ITEM_COLUMNS: list[str] = [
+    name for name in LINE_ITEM_COLUMNS if name not in COMPUTED_LINE_ITEM_FIELDS
+]
