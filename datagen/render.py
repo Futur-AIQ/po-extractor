@@ -8,12 +8,15 @@ Page size and margins come from the template's CSS (@page), so printing matches 
 """
 
 import asyncio
+import re
+from datetime import date
+from decimal import Decimal
 from types import TracebackType
 
 import pymupdf
 from playwright.async_api import Browser, BrowserContext, Playwright, async_playwright
 
-from datagen.templates import format_money
+from datagen.templates import LAYOUTS, format_date, format_money
 from schema.po_schema import PurchaseOrder
 
 
@@ -89,3 +92,54 @@ def lines_per_page(po: PurchaseOrder, texts: list[str]) -> list[list[int]]:
                 page = candidate
                 break
     return mapping
+
+
+# Values shorter than this are too generic to prove a field is printed (e.g. "27", "INR").
+MIN_FIELD_TEXT = 4
+_PAGE_NUMBER = re.compile(r"Page \d+ of \d+")
+
+
+def fieldless_pages(
+    po: PurchaseOrder, texts: list[str], layout: str, lines: list[list[int]]
+) -> list[int]:
+    """1-based numbers of pages with no extractable PO field (e.g. a generic T&C page).
+
+    The running header/footer (buyer name, "Purchase Order <no>", "Page X of Y") repeats on
+    every page, so those lines are ignored. A page has fields if a line item is mapped to it
+    or any header value, formatted as `layout` prints it, appears in its text.
+    """
+    values = _printed_header_values(po, layout)
+    furniture = {po.buyer_name, f"Purchase Order {po.po_number}"}
+    pages = []
+    for number, (text, page_lines) in enumerate(zip(texts, lines, strict=True), start=1):
+        body = "\n".join(
+            line
+            for line in text.splitlines()
+            if line.strip() not in furniture and not _PAGE_NUMBER.fullmatch(line.strip())
+        )
+        if not page_lines and not any(value in body for value in values):
+            pages.append(number)
+    return pages
+
+
+def _printed_header_values(po: PurchaseOrder, layout: str) -> list[str]:
+    """Header field values as printed in `layout`, skipping ones too short or generic to match.
+
+    Addresses are skipped (printed one part per line); the name, GSTIN and other fields of the
+    same block are enough to show the page carries fields.
+    """
+    values = []
+    for name, value in po:
+        if name == "line_items" or name.endswith("_address") or value is None:
+            continue
+        if isinstance(value, date):
+            text = format_date(value, LAYOUTS[layout])
+        elif isinstance(value, Decimal):
+            if value == 0:
+                continue  # "0.00" proves nothing
+            text = format_money(value)
+        else:
+            text = str(value)
+        if len(text) >= MIN_FIELD_TEXT:
+            values.append(text)
+    return values
