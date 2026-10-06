@@ -72,6 +72,9 @@ def test_truth_passes_consistency_and_has_v11_meta(built: tuple[Path, list[Built
         assert meta["seed"] == b.generated.meta.seed
         assert meta["page_count"] == b.page_count
         assert meta["fieldless_pages"] == b.fieldless_pages
+        assert meta["variants"] == {
+            "N": {"pdf": f"pdfs/{b.po_id}.pdf", "page_kinds": ["native"] * b.page_count}
+        }
         assert meta["knobs"]["min_lines"] <= meta["line_count"] <= meta["knobs"]["max_lines"]
     assert sum(b.generated.meta.expected_duplicate for b in pos) == 1
 
@@ -116,8 +119,9 @@ def test_masters_manifest_splits_preview(built: tuple[Path, list[BuiltPO]]) -> N
     assert [r["id"] for r in rows] == ["PO_0001", "PO_0002", "PO_0003"]
     assert all((out / r["pdf"]).exists() and (out / r["truth"]).exists() for r in rows)
     assert [r["layout"] for r in rows] == [b.layout for b in pos]
+    assert all(r["variant"] == "N" and r["base_id"] == r["id"] for r in rows)
     splits = json.loads((out / "splits.json").read_text())
-    assert sorted(splits["dev"] + splits["test"]) == [b.po_id for b in pos]
+    assert sorted(splits["dev"]["N"] + splits["test"]["N"]) == [b.po_id for b in pos]
     preview = (out / "preview.html").read_text()
     assert all(f"thumbs/{b.po_id}.png" in preview for b in pos)
 

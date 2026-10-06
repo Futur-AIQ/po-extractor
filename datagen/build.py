@@ -7,8 +7,8 @@ Output layout:
     truth/PO_0001.json    {"po": PurchaseOrder, "meta": {issuer_id, layout, seed, knobs, ...}}
     thumbs/PO_0001.png    page 1 thumbnail (for preview.html)
     masters/              mock ERP masters: parties, items, processed PO numbers (rule 10)
-    manifest.csv          one row per PO
-    splits.json           {"dev": [...], "test": [...]}, stratified by layout
+    manifest.csv          one row per PO variant (N here; scanify adds S twins and M mixed)
+    splits.json           {"dev": {"N": [...]}, "test": {"N": [...]}}, stratified by layout
     preview.html          thumbnail grid for quick visual QA
 
 The POs come from generate_many (issuer mix, unique PO numbers, deliberate duplicates). Each
@@ -234,6 +234,13 @@ def truth_document(built: BuiltPO) -> dict[str, Any]:
             "line_count": len(built.po.line_items),
             "lines_per_page": built.lines_per_page,
             "fieldless_pages": built.fieldless_pages,
+            # PDF variants of this truth: N native here; datagen.scanify adds S and M.
+            "variants": {
+                "N": {
+                    "pdf": f"pdfs/{built.po_id}.pdf",
+                    "page_kinds": ["native"] * built.page_count,
+                }
+            },
             "attempts": built.attempts,
             "has_tc_page": built.has_tc_page,
             "rows_may_break": meta.rows_may_break,
@@ -259,19 +266,25 @@ def write_po(out: Path, built: BuiltPO) -> None:
         doc[0].get_pixmap(dpi=45).save(out / "thumbs" / f"{built.po_id}.png")
 
 
+MANIFEST_FIELDS = [
+    "id", "base_id", "variant", "page_kinds", "issuer_id", "issuer_frequent",
+    "expected_duplicate", "layout", "split", "seed", "page_count", "line_count",
+    "fieldless_pages", "has_tc_page", "rows_may_break", "inter_state", "po_number",
+    "grand_total", "pdf", "truth",
+]  # fmt: skip
+
+
 def write_manifest(out: Path, built: list[BuiltPO], split_of: dict[str, str]) -> None:
-    fields = [
-        "id", "issuer_id", "issuer_frequent", "expected_duplicate", "layout", "split", "seed",
-        "page_count", "line_count", "fieldless_pages", "has_tc_page", "rows_may_break",
-        "inter_state", "po_number", "grand_total", "pdf", "truth",
-    ]  # fmt: skip
     with (out / "manifest.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
+        writer = csv.DictWriter(f, fieldnames=MANIFEST_FIELDS)
         writer.writeheader()
         for b in built:
             writer.writerow(
                 {
                     "id": b.po_id,
+                    "base_id": b.po_id,
+                    "variant": "N",
+                    "page_kinds": " ".join(["native"] * b.page_count),
                     "issuer_id": b.generated.meta.issuer_id,
                     "issuer_frequent": b.generated.meta.issuer_frequent,
                     "expected_duplicate": b.generated.meta.expected_duplicate,
@@ -372,7 +385,8 @@ async def build_dataset(
 
     splits = make_splits({b.po_id: b.layout for b in built}, dev_size, seed)
     split_of = {po_id: name for name, ids in splits.items() for po_id in ids}
-    (out / "splits.json").write_text(json.dumps(splits, indent=2) + "\n", encoding="utf-8")
+    variant_splits = {name: {"N": ids} for name, ids in splits.items()}
+    (out / "splits.json").write_text(json.dumps(variant_splits, indent=2) + "\n", encoding="utf-8")
     write_manifest(out, built, split_of)
     write_preview(out, built, split_of)
     return built

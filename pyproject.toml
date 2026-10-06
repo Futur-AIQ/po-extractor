@@ -12,7 +12,9 @@ dependencies = [
     "jinja2>=3.1.6",
     "langfuse>=4.17.0",
     "num2words>=0.5.14",
+    "numpy>=2.5.3",
     "orjson>=3.12.0",
+    "pillow>=12.3.0",
     "pydantic>=2",
     "pydantic-settings>=2.15.0",
     "pymupdf>=1.28.2",
@@ -25,6 +27,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "huggingface-hub>=1.33.0",
     "litellm[proxy]>=1.104.0",
     "matplotlib>=3.11.2",
     "pandas>=3.0.6",

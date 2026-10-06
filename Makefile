@@ -1,4 +1,4 @@
-.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100 doctor dataset
+.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100 doctor dataset scanned public-data
 
 COMPOSE := docker compose -f infra/docker-compose.yml
 
@@ -75,3 +75,9 @@ doctor:  ## Health check: .env, Docker, Redis, Langfuse, llama.cpp, LiteLLM + al
 dataset:  ## Build the synthetic dataset (60 POs, seed 42) into data/synthetic
 	uv run playwright install chromium
 	uv run python -m datagen.build --n 60 --seed 42 --out data/synthetic
+
+scanned:  ## Scanned twins for every PO + 10 mixed POs (needs make dataset first)
+	uv run python -m datagen.scanify --src data/synthetic
+
+public-data:  ## Download Northwind (Hugging Face) and FATURA (Zenodo, ~690 MB) into data/
+	uv run python -m scripts.download_public

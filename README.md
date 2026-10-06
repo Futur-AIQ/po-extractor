@@ -56,3 +56,25 @@ and prints the parsed JSON, latency and token counts.
 the SSH tunnel to `localhost:8000`, set `VLLM_API_KEY` in `.env`, then run `make litellm-h100`
 instead of `make litellm`. App code, aliases and `.env` app settings stay the same.
 `config.h100.yaml` is a template until Phase 7 (see its TODOs).
+
+## Datasets
+
+| Command | Output |
+|---|---|
+| `make dataset` | 60 synthetic Indian GST POs (`data/synthetic`): PDFs, ground truth, mock ERP masters, splits |
+| `make scanned` | Scanned twin of every PO (`PO_0001_S.pdf`, image-only pages at 200 dpi) and 10 mixed POs (`PO_00xx_M.pdf`, 1-2 pages scanned) |
+| `make public-data` | Public datasets below, into `data/northwind` and `data/fatura` (one-off developer download) |
+
+`manifest.csv` has one row per PDF with a `variant` column (`N` native, `S` scanned twin,
+`M` mixed) and `page_kinds`; `splits.json` lists each variant per split, so a benchmark can
+sample native and scanned 50/50.
+
+### Credits
+- **FATURA Dataset** (invoice images, 50 templates): Mahmoud Limam, Marwa Dhiaf, Yousri
+  Kessentini, Zenodo record [10371464](https://zenodo.org/records/10371464) (2023), licensed
+  **CC BY 4.0**. We use a 50-image sample (one white-background image per template) with its
+  original-format annotations; the images are unmodified.
+- **Northwind purchase orders**: Hugging Face dataset
+  [AyoubChLin/northwind_PurchaseOrders](https://huggingface.co/datasets/AyoubChLin/northwind_PurchaseOrders)
+  by Ayoub Cherguelaine and Faycal Boubekri (Apache-2.0); English purchase-order PDFs, used
+  as a smoke test.
