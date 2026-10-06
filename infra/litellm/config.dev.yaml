@@ -1,0 +1,40 @@
+# LiteLLM proxy config for local development on the Mac (make litellm).
+# All three aliases point to the single llama.cpp server started by `make model`
+# (infra/llamacpp/start.sh, OpenAI-compatible API on 127.0.0.1:8081).
+# The app only knows the aliases. Moving to the H100 means switching to config.h100.yaml;
+# no app code changes.
+#
+# LiteLLM loads the repo-root .env at startup. The proxy refuses to start without a master
+# key, so it uses LITELLM_API_KEY: the same value the app sends as its bearer token.
+
+model_list:
+  - model_name: po-fast
+    litellm_params:
+      # "openai/" = generic OpenAI-compatible endpoint. llama-server serves whatever model
+      # it loaded and ignores the model name, so "local-qwen" is only a label.
+      model: openai/local-qwen
+      api_base: http://127.0.0.1:8081/v1
+      api_key: sk-no-key-required   # llama-server runs without --api-key locally
+
+  - model_name: po-accurate
+    litellm_params:
+      model: openai/local-qwen
+      api_base: http://127.0.0.1:8081/v1
+      api_key: sk-no-key-required
+
+  - model_name: po-baseline
+    litellm_params:
+      model: openai/local-qwen
+      api_base: http://127.0.0.1:8081/v1
+      api_key: sk-no-key-required
+
+litellm_settings:
+  # Generous for a ~8B model on a laptop; the H100 config uses a tighter value.
+  request_timeout: 120   # seconds per request
+  num_retries: 2         # retries on transient errors (connection, 429, 5xx, timeout)
+  # Fail loudly rather than silently dropping params the app relies on
+  # (response_format json_schema, chat_template_kwargs).
+  drop_params: false
+
+general_settings:
+  master_key: os.environ/LITELLM_API_KEY

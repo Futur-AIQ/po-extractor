@@ -1,0 +1,49 @@
+# LiteLLM proxy config for the H100 benchmark / prod runs (make litellm-h100).
+# TEMPLATE: finalised in Phase 7 (Step 7.1). Every TODO must be resolved before a run.
+#
+# vLLM runs on the Lightning AI H100 and is reached through an SSH tunnel on
+# localhost:8000 (see infra/lightning/, Phase 7). The app is unchanged: it still calls
+# po-fast / po-accurate / po-baseline on LiteLLM :4000.
+#
+# Routing (PRD §9.5):
+#   po-fast      -> MoE model (FP8), fan-out extraction, thinking off
+#   po-accurate  -> Qwen3.8-27B, targeted re-asks / single-tier fallback
+#   po-baseline  -> same 27B, naive baseline (B0: page images, thinking on; set per request)
+# If the MoE misses the accuracy bar, point po-fast at the 27B entry (single-tier, C3).
+#
+# LiteLLM loads the repo-root .env at startup, so VLLM_API_KEY can live there.
+
+model_list:
+  - model_name: po-fast
+    litellm_params:
+      # TODO(Phase 7): confirm the exact HF id / --served-model-name of the MoE
+      #   (PRD candidate: Qwen3.6-35B-A3B, FP8).
+      model: hosted_vllm/Qwen/Qwen3.6-35B-A3B-FP8
+      # TODO(Phase 7): if MoE and 27B are served at the same time (C5 two-tier), give each
+      #   vLLM instance its own port/tunnel (e.g. 8000 + 8001) and update api_base.
+      api_base: http://localhost:8000/v1
+      api_key: os.environ/VLLM_API_KEY   # must match vLLM --api-key
+
+  - model_name: po-accurate
+    litellm_params:
+      # TODO(Phase 7): confirm model id (PRD §15: Qwen/Qwen3.8-27B) and FP8 vs BF16 variant.
+      model: hosted_vllm/Qwen/Qwen3.8-27B
+      api_base: http://localhost:8000/v1
+      api_key: os.environ/VLLM_API_KEY
+
+  - model_name: po-baseline
+    litellm_params:
+      # TODO(Phase 7): same 27B (BF16). Baseline sends page images and enables thinking per
+      #   request; confirm vLLM is launched with the vision encoder enabled for this run.
+      model: hosted_vllm/Qwen/Qwen3.8-27B
+      api_base: http://localhost:8000/v1
+      api_key: os.environ/VLLM_API_KEY
+
+litellm_settings:
+  # TODO(Phase 7): tune against the latency budget (slowest sub-request <= 20 s, p95 < 30 s).
+  request_timeout: 60
+  num_retries: 2
+  drop_params: false
+
+general_settings:
+  master_key: os.environ/LITELLM_API_KEY   # same key the app sends (see config.dev.yaml)

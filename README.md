@@ -22,3 +22,37 @@ To wipe Redis data as well: `docker compose -f infra/docker-compose.yml down -v`
 Tracing uses a self-hosted Langfuse (UI on **3000**), run separately with `make langfuse-up`,
 `make langfuse-logs` and `make langfuse-down`. Setup, ports and the one-time UI steps are in
 [`infra/langfuse/README.md`](infra/langfuse/README.md).
+
+## Local model and LiteLLM
+
+The app never calls a model server directly. It calls the **LiteLLM proxy** on `:4000` using
+three aliases: `po-fast`, `po-accurate` and `po-baseline`. LiteLLM decides which backend serves
+each alias.
+
+```
+app ──► LiteLLM :4000 ──► llama.cpp :8081  (Mac dev:   infra/litellm/config.dev.yaml)
+                     └──► vLLM :8000        (H100 run:  infra/litellm/config.h100.yaml, via SSH tunnel)
+```
+
+One-time setup in `.env` (see `.env.example`):
+
+```bash
+echo "LITELLM_API_KEY=sk-$(openssl rand -hex 32)" >> .env   # proxy master key = app's bearer token
+echo "LOCAL_GGUF=Qwen/Qwen3-8B-GGUF:Q4_K_M" >> .env         # official Qwen GGUF, ~5 GB download
+```
+
+Then, in two terminals:
+
+| Command | What it does |
+|---|---|
+| `make model` | `infra/llamacpp/start.sh`: `llama-server -hf $LOCAL_GGUF` on 127.0.0.1:8081 with `--jinja --parallel 4 --ctx-size 32768 --kv-unified`. The first run downloads the model. |
+| `make litellm` | LiteLLM proxy on 127.0.0.1:4000 with `config.dev.yaml`: all three aliases go to llama.cpp, with a 120 s timeout and 2 retries |
+
+Check it with `uv run python -m scripts.smoke_llm`. It sends one `po-fast` call
+(temperature 0, `response_format` JSON schema, `chat_template_kwargs.enable_thinking=false`)
+and prints the parsed JSON, latency and token counts.
+
+**Switching to the H100 later:** only the LiteLLM config changes. Start vLLM on the H100, open
+the SSH tunnel to `localhost:8000`, set `VLLM_API_KEY` in `.env`, then run `make litellm-h100`
+instead of `make litellm`. App code, aliases and `.env` app settings stay the same.
+`config.h100.yaml` is a template until Phase 7 (see its TODOs).

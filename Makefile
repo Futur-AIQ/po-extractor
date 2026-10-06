@@ -1,4 +1,4 @@
-.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs
+.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100
 
 COMPOSE := docker compose -f infra/docker-compose.yml
 
@@ -10,7 +10,7 @@ LANGFUSE_COMPOSE := docker compose -p po-langfuse --project-directory $(LANGFUSE
 	-f $(LANGFUSE_DIR)/docker-compose.yml --env-file $(LANGFUSE_ENV)
 
 help:  ## Show available targets
-	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
 
 install:  ## Install runtime + dev dependencies into .venv
 	uv sync
@@ -59,3 +59,12 @@ langfuse-down:  ## Stop Langfuse (data volumes are kept)
 
 langfuse-logs:  ## Follow Langfuse logs
 	$(LANGFUSE_COMPOSE) logs -f
+
+model:  ## Start local llama.cpp server on :8081 (model from LOCAL_GGUF in .env)
+	infra/llamacpp/start.sh
+
+litellm:  ## Start LiteLLM proxy on :4000 with the dev config (routes to llama.cpp)
+	uv run litellm --config infra/litellm/config.dev.yaml --host 127.0.0.1 --port 4000
+
+litellm-h100:  ## Start LiteLLM proxy on :4000 with the H100 config (vLLM via SSH tunnel)
+	uv run litellm --config infra/litellm/config.h100.yaml --host 127.0.0.1 --port 4000
