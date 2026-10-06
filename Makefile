@@ -1,4 +1,4 @@
-.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100
+.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100 doctor
 
 COMPOSE := docker compose -f infra/docker-compose.yml
 
@@ -68,3 +68,6 @@ litellm:  ## Start LiteLLM proxy on :4000 with the dev config (routes to llama.c
 
 litellm-h100:  ## Start LiteLLM proxy on :4000 with the H100 config (vLLM via SSH tunnel)
 	uv run litellm --config infra/litellm/config.h100.yaml --host 127.0.0.1 --port 4000
+
+doctor:  ## Health check: .env, Docker, Redis, Langfuse, llama.cpp, LiteLLM + aliases
+	uv run python -m scripts.doctor

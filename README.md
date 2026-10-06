@@ -38,7 +38,7 @@ One-time setup in `.env` (see `.env.example`):
 
 ```bash
 echo "LITELLM_API_KEY=sk-$(openssl rand -hex 32)" >> .env   # proxy master key = app's bearer token
-echo "LOCAL_GGUF=Qwen/Qwen3-8B-GGUF:Q4_K_M" >> .env         # official Qwen GGUF, ~5 GB download
+echo "LOCAL_GGUF=unsloth/Qwen3.5-9B-GGUF:Q4_K_M" >> .env    # dev model (see .env.example)
 ```
 
 Then, in two terminals:

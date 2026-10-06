@@ -27,6 +27,7 @@ def test_defaults_load_without_env_file() -> None:
     assert s.redis_url == "redis://localhost:6380/0"
     assert s.litellm_base_url == "http://localhost:4000"
     assert s.litellm_api_key.get_secret_value() == ""
+    assert s.llamacpp_base_url == "http://127.0.0.1:8081"
     assert (s.po_fast, s.po_accurate, s.po_baseline) == ("po-fast", "po-accurate", "po-baseline")
     assert s.llm_concurrency == 32
     assert s.max_reasks == 1

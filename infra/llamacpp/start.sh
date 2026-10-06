@@ -2,7 +2,7 @@
 # Start the local dev model with llama.cpp's OpenAI-compatible server on port 8081.
 # The app never calls this directly; LiteLLM (infra/litellm/config.dev.yaml) routes to it.
 #
-# Model: LOCAL_GGUF in Hugging Face "repo:quant" form, e.g. Qwen/Qwen3-8B-GGUF:Q4_K_M.
+# Model: LOCAL_GGUF in Hugging Face "repo:quant" form, e.g. unsloth/Qwen3.5-9B-GGUF:Q4_K_M.
 # Read from the environment, else from the repo-root .env. Downloaded once into the llama.cpp cache.
 set -euo pipefail
 
@@ -16,7 +16,7 @@ fi
 if [[ -z "${LOCAL_GGUF:-}" ]]; then
   echo "ERROR: LOCAL_GGUF is not set." >&2
   echo "Set it in .env (see .env.example) or the environment, in Hugging Face repo:quant form, e.g." >&2
-  echo "  LOCAL_GGUF=Qwen/Qwen3-8B-GGUF:Q4_K_M" >&2
+  echo "  LOCAL_GGUF=unsloth/Qwen3.5-9B-GGUF:Q4_K_M" >&2
   exit 1
 fi
 

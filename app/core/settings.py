@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     litellm_base_url: str = "http://localhost:4000"
     litellm_api_key: SecretStr = SecretStr("")
 
+    # Local llama.cpp server. Used only by dev tooling (`make doctor`); the app never calls it.
+    llamacpp_base_url: str = "http://127.0.0.1:8081"
+
     # Model aliases defined in the LiteLLM config.
     po_fast: str = "po-fast"
     po_accurate: str = "po-accurate"
