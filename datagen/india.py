@@ -715,9 +715,23 @@ def items_for(industry: str) -> list[CatalogueItem]:
     return [item for item in CATALOGUE if item.industry == industry]
 
 
-def generate_item_code(rng: random.Random, item: CatalogueItem) -> str:
-    """A buyer item code in one of the common styles: BRG-6205, BRG/0421/A, 10004521 (SAP)."""
-    style = rng.choices(("dash", "slash", "sap"), weights=[50, 25, 25])[0]
+ITEM_CODE_STYLES = ("dash", "slash", "sap")
+
+
+def pick_item_code_style(rng: random.Random) -> str:
+    """One buyer uses one coding style for all its items; pick it once per buyer."""
+    return rng.choices(ITEM_CODE_STYLES, weights=[50, 25, 25])[0]
+
+
+def generate_item_code(rng: random.Random, item: CatalogueItem, style: str | None = None) -> str:
+    """A buyer item code in one of the common styles: BRG-6205, BRG/0421/A, 10004521 (SAP).
+
+    `style` is one of ITEM_CODE_STYLES; if None, a style is picked at random.
+    """
+    if style is None:
+        style = pick_item_code_style(rng)
+    if style not in ITEM_CODE_STYLES:
+        raise ValueError(f"unknown item code style {style!r}; expected one of {ITEM_CODE_STYLES}")
     if style == "dash":
         return f"{item.code_prefix}-{rng.randint(100, 9999)}"
     if style == "slash":
