@@ -5,12 +5,14 @@ instructions inside the LLM JSON schema, so they name the labels a field commonl
 
 Critical fields (PRD §6, marked *) are required; every other field is optional.
 Money, quantities and rates are Decimal so no value ever passes through a float.
+Dates are extracted exactly as printed and parsed day-first in code (schema/dates.py).
 """
 
-from datetime import date
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from schema.dates import PODate
 
 
 class LineItem(BaseModel):
@@ -82,11 +84,11 @@ class LineItem(BaseModel):
             "'Amount (incl. tax)'."
         )
     )
-    line_delivery_date: date | None = Field(
+    line_delivery_date: PODate | None = Field(
         default=None,
         description=(
-            "Delivery date for this row if given per row, as YYYY-MM-DD "
-            "(source is usually DD/MM/YYYY). Labels: 'Delivery Date', 'Due Date', 'Schedule'."
+            "Delivery date for this row if given per row, exactly as printed. "
+            "Labels: 'Delivery Date', 'Due Date', 'Schedule'."
         ),
     )
 
@@ -103,9 +105,9 @@ class PurchaseOrder(BaseModel):
             "Labels: 'PO No.', 'P.O. Number', 'Order No.', 'P.O. Ref', 'PO#'."
         )
     )
-    po_date: date = Field(
+    po_date: PODate = Field(
         description=(
-            "Date the PO was issued, as YYYY-MM-DD (source is usually DD/MM/YYYY). "
+            "Date the PO was issued, exactly as printed, e.g. '14/03/2026', '14-Mar-2026'. "
             "Labels: 'PO Date', 'Order Date', 'Date', 'Dated'."
         )
     )
@@ -115,9 +117,11 @@ class PurchaseOrder(BaseModel):
             "Amendment/revision number of the PO. Labels: 'Amendment No.', 'Rev. No.', 'Revision'."
         ),
     )
-    amendment_date: date | None = Field(
+    amendment_date: PODate | None = Field(
         default=None,
-        description="Date of the amendment, as YYYY-MM-DD. Labels: 'Amendment Date', 'Rev. Date'.",
+        description=(
+            "Date of the amendment, exactly as printed. Labels: 'Amendment Date', 'Rev. Date'."
+        ),
     )
     quotation_ref: str | None = Field(
         default=None,
@@ -126,10 +130,11 @@ class PurchaseOrder(BaseModel):
             "Labels: 'Quotation Ref', 'Your Ref', 'Offer No.', 'Quote No.'."
         ),
     )
-    quotation_date: date | None = Field(
+    quotation_date: PODate | None = Field(
         default=None,
         description=(
-            "Date of the vendor quotation, as YYYY-MM-DD. Labels: 'Quotation Date', 'Offer Date'."
+            "Date of the vendor quotation, exactly as printed. "
+            "Labels: 'Quotation Date', 'Offer Date'."
         ),
     )
     indent_no: str | None = Field(
@@ -142,17 +147,17 @@ class PurchaseOrder(BaseModel):
         default=None,
         description="ISO 4217 currency code, e.g. 'INR', 'USD'. Map '₹', 'Rs.', 'Rupees' to 'INR'.",
     )
-    delivery_date: date | None = Field(
+    delivery_date: PODate | None = Field(
         default=None,
         description=(
-            "Required delivery date for the whole order, as YYYY-MM-DD. "
+            "Required delivery date for the whole order, exactly as printed. "
             "Labels: 'Delivery Date', 'Delivery By', 'Required By', 'Due Date'."
         ),
     )
-    po_validity_date: date | None = Field(
+    po_validity_date: PODate | None = Field(
         default=None,
         description=(
-            "Date until which the PO is valid, as YYYY-MM-DD. "
+            "Date until which the PO is valid, exactly as printed. "
             "Labels: 'Valid Till', 'Validity', 'PO Expiry'."
         ),
     )

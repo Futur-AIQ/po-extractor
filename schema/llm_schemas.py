@@ -3,29 +3,30 @@
 Schemas are hand-built rather than taken from `model_json_schema()` so they stay flat and
 portable: no $ref, no anyOf, only keywords that both vLLM and llama.cpp grammars accept.
 All header fields are optional so the model omits absent values instead of emitting nulls.
+Date fields are plain strings copied as printed; the models parse them (schema/dates.py).
 """
 
 import json
 import types
 from datetime import date
 from decimal import Decimal
-from typing import Any, Union, get_args, get_origin
+from typing import Annotated, Any, Union, get_args, get_origin
 
 from pydantic import BaseModel, ValidationError
 
 from schema.fields import FIELD_GROUPS, LINE_ITEM_COLUMNS
 from schema.po_schema import LineItem, PurchaseOrder
 
-DATE_PATTERN = "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-
 
 def _base_type(annotation: Any) -> Any:
-    """Return T for `T | None`, otherwise the annotation unchanged."""
+    """Return T for `T | None` and `Annotated[T, ...]`, otherwise the annotation unchanged."""
     if get_origin(annotation) in (Union, types.UnionType):
         args = [arg for arg in get_args(annotation) if arg is not type(None)]
         if len(args) != 1:
             raise TypeError(f"Unsupported union type: {annotation}")
-        return args[0]
+        annotation = args[0]
+    if get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
     return annotation
 
 
@@ -39,7 +40,9 @@ def _json_type(annotation: Any) -> dict[str, Any]:
     if base is Decimal:
         return {"type": "number"}
     if base is date:
-        return {"type": "string", "pattern": DATE_PATTERN}
+        # No date pattern: the model copies the date as printed (a YYYY-MM-DD grammar made it
+        # copy digits in print order). Parsing happens in the model validators.
+        return {"type": "string"}
     raise TypeError(f"No JSON type mapping for {annotation}")
 
 
@@ -75,10 +78,11 @@ def compact_line_items_schema() -> dict[str, Any]:
         cell = _json_type(LineItem.model_fields[name].annotation)
         cell["type"] = [cell["type"], "null"]
         cells.append(cell)
+    # Row length is fixed by prefixItems + min/maxItems. No `"items": false`: llama.cpp
+    # rejects boolean sub-schemas ("schema must be an object").
     row = {
         "type": "array",
         "prefixItems": cells,
-        "items": False,
         "minItems": len(cells),
         "maxItems": len(cells),
     }

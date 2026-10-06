@@ -14,7 +14,6 @@ from schema.fields import (
     LINE_ITEM_COLUMNS,
 )
 from schema.llm_schemas import (
-    DATE_PATTERN,
     MalformedRowError,
     compact_line_items_schema,
     json_schema_for_group,
@@ -40,7 +39,7 @@ SAMPLE_ROW = [
     Decimal("2518.83"),
     None,
     Decimal("33024.66"),
-    "2026-11-15",
+    "15/11/2026",
 ]
 
 
@@ -124,7 +123,10 @@ def test_group_schema_types() -> None:
     assert totals["grand_total"]["type"] == "number"
     assert totals["amount_in_words"]["type"] == "string"
     header = json_schema_for_group("G1_HEADER_TERMS")["properties"]
-    assert header["po_date"] == {**header["po_date"], "type": "string", "pattern": DATE_PATTERN}
+    # Dates are free strings copied as printed; no pattern forcing the model to reformat.
+    assert header["po_date"]["type"] == "string"
+    assert "pattern" not in header["po_date"]
+    assert "as printed" in header["po_date"]["description"]
     assert header["po_number"]["type"] == "string"
     parties = json_schema_for_group("G2_PARTIES")["properties"]
     assert parties["buyer_state_code"]["type"] == "string"  # keeps leading zeros, e.g. '07'
@@ -159,6 +161,28 @@ def test_compact_schema_shape() -> None:
     assert "$ref" not in json.dumps(schema)
 
 
+def _subschemas(node: object) -> list[object]:
+    """Every value used as a schema (properties, items, prefixItems) inside `node`."""
+    found: list[object] = []
+    if isinstance(node, dict):
+        children = list(node.get("properties", {}).values()) + node.get("prefixItems", [])
+        if "items" in node:
+            children.append(node["items"])
+        for child in children:
+            found.append(child)
+            found.extend(_subschemas(child))
+    return found
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [compact_line_items_schema(), *(json_schema_for_group(g) for g in FIELD_GROUPS)],
+)
+def test_no_boolean_subschemas(schema: dict) -> None:
+    # llama.cpp rejects boolean schemas such as `"items": false` with HTTP 500.
+    assert all(isinstance(sub, dict) for sub in _subschemas(schema))
+
+
 def test_compact_row_round_trip() -> None:
     [item] = rows_to_line_items([SAMPLE_ROW])
     assert item.line_no == 1
@@ -168,7 +192,7 @@ def test_compact_row_round_trip() -> None:
     assert item.line_delivery_date == date(2026, 11, 15)
     back = [getattr(item, name) for name in LINE_ITEM_COLUMNS]
     assert back[:-1] == SAMPLE_ROW[:-1]
-    assert back[-1] == date(2026, 11, 15)
+    assert back[-1] == date(2026, 11, 15)  # printed "15/11/2026" parsed day-first
 
 
 def test_round_trip_from_llm_json_text() -> None:
@@ -193,6 +217,13 @@ def test_missing_critical_cell_names_the_column() -> None:
     row = list(SAMPLE_ROW)
     row[LINE_ITEM_COLUMNS.index("hsn_sac")] = None
     with pytest.raises(MalformedRowError, match="row 0: hsn_sac: Field required"):
+        rows_to_line_items([row])
+
+
+def test_bad_printed_date_names_the_column() -> None:
+    row = list(SAMPLE_ROW)
+    row[LINE_ITEM_COLUMNS.index("line_delivery_date")] = "11/15/2026"  # month-first: rejected
+    with pytest.raises(MalformedRowError, match="row 0: line_delivery_date"):
         rows_to_line_items([row])
 
 
