@@ -118,6 +118,7 @@ def test_all_optional_knobs_on() -> None:
         p_amendment=1, p_quotation_ref=1, p_indent_no=1, p_freight=1, p_other_charges=1,
         p_header_discount=1, p_line_delivery_dates=1, p_discount_per_line=1,
         p_bill_to_differs=1, p_ship_to_differs=1, p_tc_page=1, optional_drop_rate=0,
+        p_rows_split_across_pages=1,
     )  # fmt: skip
     for g in generate_many(20, seed=6, knobs=knobs):
         po = g.po
@@ -127,7 +128,7 @@ def test_all_optional_knobs_on() -> None:
         assert all(i.line_delivery_date and i.discount_pct for i in po.line_items)
         assert po.bill_to_address != po.buyer_address
         assert po.ship_to_address != po.bill_to_address
-        assert g.meta.has_tc_page
+        assert g.meta.has_tc_page and g.meta.rows_may_break
 
 
 def test_all_optional_knobs_off() -> None:
@@ -135,7 +136,7 @@ def test_all_optional_knobs_off() -> None:
         p_amendment=0, p_quotation_ref=0, p_indent_no=0, p_freight=0, p_other_charges=0,
         p_header_discount=0, p_line_delivery_dates=0, p_discount_per_line=0,
         p_multiline_description_per_line=0, p_bill_to_differs=0, p_ship_to_differs=0,
-        p_tc_page=0,
+        p_tc_page=0, p_rows_split_across_pages=0,
     )  # fmt: skip
     for g in generate_many(20, seed=7, knobs=knobs):
         po = g.po
@@ -144,7 +145,7 @@ def test_all_optional_knobs_off() -> None:
         assert po.freight_charges is po.other_charges is po.discount_total is None
         assert all(i.discount_pct is None and i.line_delivery_date is None for i in po.line_items)
         assert po.bill_to_address == po.ship_to_address == po.buyer_address
-        assert not g.meta.has_tc_page
+        assert not g.meta.has_tc_page and not g.meta.rows_may_break
 
 
 def test_line_count_knob() -> None:

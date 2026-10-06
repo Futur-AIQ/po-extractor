@@ -53,6 +53,7 @@ class Knobs:
     p_bill_to_differs: float = 0.25  # bill-to is another unit of the buyer (same PAN)
     p_ship_to_differs: float = 0.30  # goods go to another plant than the bill-to
     p_tc_page: float = 0.50
+    p_rows_split_across_pages: float = 0.30  # table rows may break across a page boundary
     po_date_from: date = date(2025, 4, 1)
     po_date_to: date = date(2026, 9, 30)
 
@@ -74,6 +75,7 @@ class PoMeta:
     vendor_industry: str
     inter_state: bool
     has_tc_page: bool
+    rows_may_break: bool = False
 
 
 @dataclass(frozen=True)
@@ -202,7 +204,9 @@ class _Builder:
 
         po = PurchaseOrder.model_validate({**self.fields, "line_items": lines})
         has_tc_page = rng.random() < knobs.p_tc_page
-        return GeneratedPO(po, PoMeta(self.seed, vendor_industry, inter_state, has_tc_page))
+        rows_may_break = rng.random() < knobs.p_rows_split_across_pages
+        meta = PoMeta(self.seed, vendor_industry, inter_state, has_tc_page, rows_may_break)
+        return GeneratedPO(po, meta)
 
     # --- parties ---------------------------------------------------------------------------
 

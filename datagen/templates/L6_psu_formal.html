@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% block footer_note %}Please quote the Purchase Order number in all correspondence and invoices.{% endblock %}
+
+{% block layout_css %}
+body { font: 9pt "Times New Roman", Times, serif; color: #000; line-height: 1.32; }
+.letterhead { text-align: center; border-bottom: 1.5px solid #000; padding-bottom: 2mm; margin-bottom: 3mm; }
+.letterhead .party-name { font-size: 15pt; font-weight: bold; text-transform: uppercase; letter-spacing: .5px; }
+.letterhead .party { font-size: 8.2pt; }
+.letterhead .addr { display: inline; }
+.letterhead .addr + .addr::before { content: ", "; }
+.letterhead .kv { display: inline-block; margin: 0 2.5mm; }
+.dept { font-weight: bold; letter-spacing: 1px; margin-top: 1mm; }
+.refline { display: flex; justify-content: space-between; margin-bottom: 3mm; font-weight: bold; }
+.to { margin-bottom: 3mm; }
+.to .party-name { font-weight: bold; }
+.kv .k::after { content: ":"; }
+.subject { font-weight: bold; text-decoration: underline; margin: 2mm 0; }
+.refs .kv { display: inline-block; margin-right: 6mm; }
+.para { text-align: justify; margin: 2mm 0 3mm; }
+table.items { font-size: 7.2pt; }
+table.items td.desc { width: 26%; }
+table.items th, table.items td { border: 1px solid #000; padding: .8mm .8mm; vertical-align: top; }
+table.items th { font-weight: bold; text-align: center; }
+.after { display: grid; grid-template-columns: 1fr 72mm; gap: 5mm; margin-top: 2mm; }
+table.totals th, table.totals td { border: 1px solid #000; padding: .8mm 1.5mm; text-align: left; font-weight: normal; }
+table.totals td { text-align: right; }
+table.totals tr.grand_total th, table.totals tr.grand_total td { font-weight: bold; }
+.words { font-weight: bold; margin-bottom: 2mm; }
+.consignee { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; margin: 3mm 0; }
+.party-title { font-weight: bold; text-decoration: underline; }
+.overleaf { font-style: italic; margin-top: 2mm; }
+.signatures { display: flex; justify-content: space-between; margin-top: 6mm; }
+.sig-space { height: 13mm; }
+.right { text-align: right; }
+.tc-title { text-align: center; font-size: 11pt; text-decoration: underline; }
+ol.tc li { margin-bottom: 1.8mm; text-align: justify; }
+{% endblock %}
+
+{% block content %}
+<div class="letterhead">
+  {{ m.party(parties.buyer, gstin="GSTIN", pan="PAN", phone="Phone", email="E-mail") }}
+  <div class="dept">PURCHASE DEPARTMENT</div>
+</div>
+
+<div class="refline">
+  <div>Purchase Order No.: {{ po.po_number }}</div>
+  <div>Date: {{ d(po.po_date) }}</div>
+</div>
+
+<div class="to">
+  To,<br>
+  {{ m.party(parties.vendor, gstin="GSTIN", pan="PAN", code="Vendor Code", contact="Kind Attn.", phone="Phone", email="E-mail") }}
+</div>
+
+<div class="subject">Sub: Purchase Order for supply of materials / services</div>
+<div class="refs">
+  {{ m.kv("Ref", po.quotation_ref) }}
+  {{ m.kv("Quotation dated", d(po.quotation_date)) }}
+  {{ m.kv("Indent No.", po.indent_no) }}
+  {{ m.kv("Amendment No.", po.amendment_no) }}
+  {{ m.kv("Amendment dated", d(po.amendment_date)) }}
+</div>
+
+<p class="para">Dear Sir / Madam,<br>
+With reference to the above, we are pleased to place this order on you for the supply of the
+following items at the rates, terms and conditions mentioned hereunder and in the terms and
+conditions attached. This order is issued on {{ long_date(po.po_date) }}. Kindly acknowledge
+receipt and confirm acceptance within seven days.</p>
+
+<table class="items">
+  <thead>
+    <tr>
+      <th>S.No.</th><th>Description of Stores</th>
+      {% if cols.item_code %}<th>Code No.</th>{% endif %}
+      <th>HSN/SAC</th>
+      {% if cols.uom %}<th>Unit</th>{% endif %}
+      <th>Qty</th><th>Unit Rate (Rs.)</th>
+      {% if cols.discount %}<th>Disc. %</th>{% endif %}
+      <th>Value (Rs.)</th><th>GST Rate</th>
+      {% if cols.intra_state %}<th>CGST (Rs.)</th><th>SGST (Rs.)</th>{% else %}<th>IGST (Rs.)</th>{% endif %}
+      <th>Amount (Rs.)</th>
+      {% if cols.delivery_date %}<th>Delivery by</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for i in po.line_items %}
+    <tr>
+      <td class="center">{{ i.line_no }}</td>
+      <td class="desc">{{ i.description }}</td>
+      {% if cols.item_code %}<td>{{ i.item_code or "" }}</td>{% endif %}
+      <td>{{ i.hsn_sac }}</td>
+      {% if cols.uom %}<td>{{ i.uom or "" }}</td>{% endif %}
+      <td class="num">{{ i.quantity|qty }}</td>
+      <td class="num">{{ i.unit_rate|money }}</td>
+      {% if cols.discount %}<td class="num">{{ i.discount_pct|pct }}</td>{% endif %}
+      <td class="num">{{ i.taxable_value|money }}</td>
+      <td class="num">{{ i.gst_rate|pct }}%</td>
+      {% if cols.intra_state %}
+      <td class="num">{{ i.cgst_amount|money }}</td><td class="num">{{ i.sgst_amount|money }}</td>
+      {% else %}
+      <td class="num">{{ i.igst_amount|money }}</td>
+      {% endif %}
+      <td class="num">{{ i.line_total|money }}</td>
+      {% if cols.delivery_date %}<td>{{ d(i.line_delivery_date) }}</td>{% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="after keep">
+  <div>
+    {% if po.amount_in_words %}<div class="words">(Rupees in words: {{ po.amount_in_words }})</div>{% endif %}
+    {{ m.kv("Currency", po.currency) }}
+    {{ m.kv("Place of Supply", po.place_of_supply) }}
+  </div>
+  {{ m.totals(po, [
+    ("subtotal", "Total Value"), ("discount_total", "Less: Discount"),
+    ("freight_charges", "Add: Freight"), ("other_charges", "Add: Packing & Forwarding"),
+    ("cgst_total", "Add: CGST"), ("sgst_total", "Add: SGST"), ("igst_total", "Add: IGST"),
+    ("total_tax", "Total GST"), ("round_off", "Round Off"), ("grand_total", "Total Order Value (Rs.)"),
+  ]) }}
+</div>
+
+<div class="consignee keep">
+  {{ m.party(parties.ship_to, "Consignee", gstin="GSTIN") }}
+  {{ m.party(parties.bill_to, "Paying Authority / Bill To", gstin="GSTIN") }}
+</div>
+
+<div class="overleaf">This order is subject to the terms and conditions enclosed.</div>
+<div class="signatures keep">
+  <div>{{ m.kv("Dealing Officer", po.prepared_by) }}</div>
+  <div class="right">
+    Yours faithfully,<br>For {{ po.buyer_name }}
+    <div class="sig-space"></div>
+    {{ m.kv("Name", po.approved_by) }}
+    <div>Authorised Signatory</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block tc_page %}
+{% set clauses = [
+  ("Payment", po.payment_terms),
+  ("Price basis / Delivery terms", po.delivery_terms),
+  ("Delivery period", ("Material shall be delivered on or before " ~ d(po.delivery_date) ~ ".") if po.delivery_date else none),
+  ("Freight", po.freight_terms),
+  ("Mode of despatch", po.mode_of_transport),
+  ("Place of delivery", po.delivery_location),
+  ("Packing", po.packing_instructions),
+  ("Warranty / Guarantee", po.warranty_terms),
+  ("Validity", ("This order is valid up to " ~ d(po.po_validity_date) ~ ".") if po.po_validity_date else none),
+] %}
+<section class="tc-page">
+  <h2 class="tc-title">TERMS AND CONDITIONS</h2>
+  <ol class="tc">
+    {% for title, text in clauses if text %}
+    <li><b>{{ title }}:</b> {{ text }}</li>
+    {% endfor %}
+    <li><b>Liquidated damages:</b> For delay in delivery, liquidated damages at 0.5% of the value of delayed supplies per week or part thereof, subject to a maximum of 10% of the order value, shall be levied.</li>
+    <li><b>Inspection:</b> Final inspection shall be carried out at the consignee's premises. Rejected stores shall be replaced free of cost within 15 days.</li>
+    <li><b>Invoicing:</b> Invoices shall be raised in triplicate quoting this order number, GSTIN and HSN/SAC, with e-way bill where applicable.</li>
+    <li><b>Security deposit:</b> Not applicable unless specifically mentioned in this order.</li>
+    <li><b>Arbitration:</b> All disputes shall be settled by arbitration under the Arbitration and Conciliation Act, 1996, and shall be subject to the jurisdiction of the courts at the place of the purchaser's registered office.</li>
+  </ol>
+</section>
+{% endblock %}

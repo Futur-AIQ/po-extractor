@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Purchase Order {{ po.po_number }}</title>
+<style>
+/* ---- Print: A4, repeated company header, "Page X of Y" (CSS margin boxes, Chrome 131+) ---- */
+@page {
+  size: A4;
+  margin: 20mm 13mm 17mm 13mm;
+  @top-left {
+    content: "{{ po.buyer_name|css_string }}";
+    font: 7.5pt Arial, Helvetica, sans-serif; color: #444;
+  }
+  @top-right {
+    content: "Purchase Order {{ po.po_number|css_string }}";
+    font: 7.5pt Arial, Helvetica, sans-serif; color: #444;
+  }
+  @bottom-left {
+    content: "{% block footer_note %}This is a computer generated purchase order.{% endblock %}";
+    font: 7pt Arial, Helvetica, sans-serif; color: #666;
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font: 7.5pt Arial, Helvetica, sans-serif; color: #444;
+  }
+}
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; }
+p { margin: 0 0 2mm; }
+table { border-collapse: collapse; width: 100%; }
+
+/* Item tables: header row repeats on every page; rows stay whole unless the knob allows. */
+table.items thead { display: table-header-group; }
+table.items tr { break-inside: avoid; page-break-inside: avoid; }
+body.rows-may-break table.items tr { break-inside: auto; page-break-inside: auto; }
+
+.keep { break-inside: avoid; page-break-inside: avoid; }
+.tc-page { break-before: page; page-break-before: always; }
+.num { text-align: right; white-space: nowrap; }
+.center { text-align: center; }
+
+/* Screen preview: show the document as a sheet of A4 paper. */
+@media screen {
+  html { background: #8b9099; }
+  body {
+    width: 210mm; min-height: 297mm; margin: 10mm auto; padding: 20mm 13mm 17mm;
+    background: #fff; box-shadow: 0 2px 14px rgba(0, 0, 0, .35);
+  }
+}
+{% block layout_css %}{% endblock %}
+</style>
+</head>
+<body class="{{ layout_id }}{{ ' rows-may-break' if rows_may_break else '' }}">
+{% block content %}{% endblock %}
+{% if tc_page %}
+{% block tc_page %}{% include "_tc_page.html" %}{% endblock %}
+{% endif %}
+</body>
+</html>

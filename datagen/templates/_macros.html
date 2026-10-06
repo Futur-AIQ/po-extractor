@@ -1,0 +1,60 @@
+{#- Shared macros. Every macro skips values that are None or "" so absent fields leave no label. -#}
+
+{% macro kv(label, value, cls="kv") -%}
+{% if value is not none and value != "" %}<div class="{{ cls }}"><span class="k">{{ label }}</span> <span class="v">{{ value }}</span></div>{% endif %}
+{%- endmacro %}
+
+{% macro kv_row(label, value) -%}
+{% if value is not none and value != "" %}<tr><th class="k">{{ label }}</th><td class="v">{{ value }}</td></tr>{% endif %}
+{%- endmacro %}
+
+{% macro party(p, title=none, name_cls="party-name", gstin="GSTIN", pan="PAN", state="State",
+               state_code="State Code", code="Vendor Code", contact="Contact Person",
+               phone="Phone", email="Email") -%}
+<div class="party">
+{% if title %}<div class="party-title">{{ title }}</div>{% endif %}
+{% if p.name %}<div class="{{ name_cls }}">{{ p.name }}</div>{% endif %}
+{% for line in p.address %}<div class="addr">{{ line }}</div>{% endfor %}
+{{ kv(gstin, p.gstin) }}
+{{ kv(pan, p.pan) }}
+{{ kv(state, p.state) }}
+{{ kv(state_code, p.state_code) }}
+{{ kv(code, p.code) }}
+{{ kv(contact, p.contact) }}
+{{ kv(phone, p.phone) }}
+{{ kv(email, p.email) }}
+</div>
+{%- endmacro %}
+
+{#- labels: list of (field name, label) in print order -#}
+{% macro totals(po, labels, cls="totals", currency="") -%}
+<table class="{{ cls }}">
+{% for key, label in labels %}
+{% set value = po[key] %}
+{% if value is not none %}
+<tr class="{{ key }}"><th class="k">{{ label }}</th><td class="v num">{{ currency }}{{ value|money }}</td></tr>
+{% endif %}
+{% endfor %}
+</table>
+{%- endmacro %}
+
+{% macro terms(po, labels) -%}
+{% for key, label in labels %}{{ kv(label, po[key]) }}{% endfor %}
+{%- endmacro %}
+
+{#- Multi-line description: each sentence on its own printed line. -#}
+{% macro description_lines(text) -%}
+{% for part in text.split(". ") %}{{ part }}{% if not loop.last %}.<br>{% endif %}{% endfor %}
+{%- endmacro %}
+
+{% macro signatures(po, prepared="Prepared By", approved="Approved By", signatory="Authorised Signatory") -%}
+<div class="signatures keep">
+  <div class="sig">{{ kv(prepared, po.prepared_by) }}</div>
+  <div class="sig right">
+    <div class="for">For {{ po.buyer_name }}</div>
+    <div class="sig-space"></div>
+    {{ kv(approved, po.approved_by) }}
+    <div class="signatory">{{ signatory }}</div>
+  </div>
+</div>
+{%- endmacro %}

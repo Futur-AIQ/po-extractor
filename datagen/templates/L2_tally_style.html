@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% block footer_note %}This is a Computer Generated Document{% endblock %}
+
+{% block layout_css %}
+body { font: 7.6pt "Arial Narrow", Arial, Helvetica, sans-serif; color: #000; }
+.title { text-align: center; font-weight: bold; font-size: 11pt; margin-bottom: 1.5mm; }
+table.outer, table.outer > tbody > tr > td { border: 1px solid #000; }
+table.outer > tbody > tr > td { vertical-align: top; padding: 1mm 1.5mm; }
+.party-name { font-weight: bold; font-size: 9pt; }
+.party-title { color: #333; }
+.kv .k::after { content: " :"; }
+.cell-label { color: #333; font-size: 7pt; }
+.cell-value { font-weight: bold; min-height: 3.5mm; }
+table.items { margin-top: -1px; }
+table.items th, table.items td { border-left: 1px solid #000; border-right: 1px solid #000; padding: .6mm 1mm; vertical-align: top; }
+table.items thead th { border: 1px solid #000; font-weight: normal; }
+table.items tbody tr:last-child td { border-bottom: 1px solid #000; }
+table.items .desc { font-weight: bold; }
+.after-items { display: grid; grid-template-columns: 1fr 70mm; border: 1px solid #000; border-top: none; }
+.after-items > div { padding: 1mm 1.5mm; }
+.after-items > div + div { border-left: 1px solid #000; padding: 0; }
+table.totals th, table.totals td { padding: .6mm 1.5mm; text-align: left; font-weight: normal; }
+table.totals td { text-align: right; }
+table.totals tr.grand_total th, table.totals tr.grand_total td { font-weight: bold; border-top: 1px solid #000; }
+.words-label { font-size: 7pt; }
+.words { font-weight: bold; margin-bottom: 1.5mm; }
+.hsn-title { margin: 2mm 0 .5mm; font-weight: bold; }
+table.hsn th, table.hsn td { border: 1px solid #000; padding: .6mm 1mm; font-weight: normal; }
+table.hsn tfoot td { font-weight: bold; }
+.signatures { display: flex; justify-content: space-between; border: 1px solid #000; border-top: none; padding: 1.5mm; }
+.sig-space { height: 10mm; }
+.right { text-align: right; }
+.declaration { font-size: 7pt; }
+.tc-title { font-size: 10pt; text-align: center; }
+ol.tc li { margin-bottom: 1.2mm; }
+{% endblock %}
+
+{% block content %}
+<div class="title">Purchase Order</div>
+<table class="outer">
+  <tbody>
+    <tr>
+      <td rowspan="4" style="width: 52%">{{ m.party(parties.buyer, gstin="GSTIN/UIN", state="State Name", state_code="Code", phone="Contact", email="E-Mail") }}</td>
+      <td><div class="cell-label">Voucher No.</div><div class="cell-value">{{ po.po_number }}</div></td>
+      <td><div class="cell-label">Dated</div><div class="cell-value">{{ d(po.po_date) }}</div></td>
+    </tr>
+    <tr>
+      <td>{% if po.amendment_no %}<div class="cell-label">Amendment No.</div><div class="cell-value">{{ po.amendment_no }}</div>{% endif %}
+          {% if po.indent_no %}<div class="cell-label">Indent No.</div><div class="cell-value">{{ po.indent_no }}</div>{% endif %}</td>
+      <td>{% if po.amendment_date %}<div class="cell-label">Amendment Dated</div><div class="cell-value">{{ d(po.amendment_date) }}</div>{% endif %}
+          {% if po.payment_terms %}<div class="cell-label">Mode/Terms of Payment</div><div class="cell-value">{{ po.payment_terms }}</div>{% endif %}</td>
+    </tr>
+    <tr>
+      <td>{% if po.quotation_ref %}<div class="cell-label">Supplier's Ref.</div><div class="cell-value">{{ po.quotation_ref }}</div>{% endif %}
+          {% if po.quotation_date %}<div class="cell-label">Ref. Dated</div><div class="cell-value">{{ d(po.quotation_date) }}</div>{% endif %}</td>
+      <td>{% if po.mode_of_transport %}<div class="cell-label">Dispatched through</div><div class="cell-value">{{ po.mode_of_transport }}</div>{% endif %}
+          {% if po.delivery_location %}<div class="cell-label">Destination</div><div class="cell-value">{{ po.delivery_location }}</div>{% endif %}</td>
+    </tr>
+    <tr>
+      <td colspan="2">{% if po.delivery_terms %}<div class="cell-label">Terms of Delivery</div><div class="cell-value">{{ po.delivery_terms }}</div>{% endif %}
+          {% if po.delivery_date %}<div class="cell-label">Delivery By</div><div class="cell-value">{{ d(po.delivery_date) }}</div>{% endif %}</td>
+    </tr>
+    <tr>
+      <td>{{ m.party(parties.vendor, "Supplier (Bill from)", gstin="GSTIN/UIN", state="State Name", state_code="Code", code="Ledger Code", phone="Contact", email="E-Mail") }}</td>
+      <td colspan="2">{{ m.party(parties.bill_to, "Buyer (Bill to)", gstin="GSTIN/UIN", state_code="Code") }}</td>
+    </tr>
+    <tr>
+      <td>{{ m.party(parties.ship_to, "Consignee (Ship to)", gstin="GSTIN/UIN", state_code="Code") }}</td>
+      <td colspan="2">
+        {{ m.kv("Place of Supply", po.place_of_supply) }}
+        {{ m.kv("Currency", po.currency) }}
+        {{ m.kv("Order Valid Upto", d(po.po_validity_date)) }}
+        {{ m.kv("Freight", po.freight_terms) }}
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="items">
+  <thead>
+    <tr>
+      <th>Sl No.</th>
+      {% if cols.item_code %}<th>Part No.</th>{% endif %}
+      <th>Description of Goods</th><th>HSN/SAC</th><th>Quantity</th><th>Rate</th>
+      {% if cols.uom %}<th>per</th>{% endif %}
+      {% if cols.discount %}<th>Disc. %</th>{% endif %}
+      <th>Amount</th><th>GST Rate</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th>
+      {% if cols.delivery_date %}<th>Due on</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for i in po.line_items %}
+    <tr>
+      <td class="center">{{ i.line_no }}</td>
+      {% if cols.item_code %}<td>{{ i.item_code or "" }}</td>{% endif %}
+      <td class="desc">{{ i.description }}</td>
+      <td>{{ i.hsn_sac }}</td>
+      <td class="num">{{ i.quantity|qty }} {{ i.uom or "" }}</td>
+      <td class="num">{{ i.unit_rate|money }}</td>
+      {% if cols.uom %}<td>{{ i.uom or "" }}</td>{% endif %}
+      {% if cols.discount %}<td class="num">{{ i.discount_pct|pct }}{{ " %" if i.discount_pct is not none else "" }}</td>{% endif %}
+      <td class="num">{{ i.taxable_value|money }}</td>
+      <td class="num">{{ i.gst_rate|pct }} %</td>
+      <td class="num">{{ i.cgst_amount|money }}</td>
+      <td class="num">{{ i.sgst_amount|money }}</td>
+      <td class="num">{{ i.igst_amount|money }}</td>
+      <td class="num">{{ i.line_total|money }}</td>
+      {% if cols.delivery_date %}<td>{{ d(i.line_delivery_date) }}</td>{% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="after-items keep">
+  <div>
+    {% if po.amount_in_words %}<div class="words-label">Amount Chargeable (in words)</div><div class="words">INR {{ po.amount_in_words }}</div>{% endif %}
+    {{ m.kv("Warranty", po.warranty_terms) }}
+    {{ m.kv("Packing", po.packing_instructions) }}
+  </div>
+  <div>
+    {{ m.totals(po, [
+      ("subtotal", "Total (before tax)"), ("discount_total", "Less : Discount"),
+      ("freight_charges", "Freight Charges"), ("other_charges", "Packing & Forwarding"),
+      ("cgst_total", "Output CGST"), ("sgst_total", "Output SGST"), ("igst_total", "Output IGST"),
+      ("total_tax", "Total GST"), ("round_off", "Rounded Off (+/-)"), ("grand_total", "Total"),
+    ]) }}
+  </div>
+</div>
+
+<div class="hsn-title keep">HSN/SAC wise Tax Summary</div>
+<table class="hsn keep">
+  <thead>
+    <tr>
+      <th rowspan="2">HSN/SAC</th><th rowspan="2">Taxable Value</th>
+      <th colspan="2">Central Tax</th><th colspan="2">State Tax</th><th colspan="2">Integrated Tax</th>
+      <th rowspan="2">Total Tax Amount</th>
+    </tr>
+    <tr><th>Rate</th><th>Amount</th><th>Rate</th><th>Amount</th><th>Rate</th><th>Amount</th></tr>
+  </thead>
+  <tbody>
+  {% for r in hsn_rows %}
+    <tr>
+      <td>{{ r.hsn_sac }}</td><td class="num">{{ r.taxable|money }}</td>
+      <td class="num">{{ (r.gst_rate / 2)|pct if r.cgst else "" }}{{ "%" if r.cgst else "" }}</td><td class="num">{{ r.cgst|money if r.cgst else "" }}</td>
+      <td class="num">{{ (r.gst_rate / 2)|pct if r.sgst else "" }}{{ "%" if r.sgst else "" }}</td><td class="num">{{ r.sgst|money if r.sgst else "" }}</td>
+      <td class="num">{{ r.gst_rate|pct if r.igst else "" }}{{ "%" if r.igst else "" }}</td><td class="num">{{ r.igst|money if r.igst else "" }}</td>
+      <td class="num">{{ r.total_tax|money }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="signatures keep">
+  <div class="declaration">
+    Declaration: Please supply the goods as per the above order and terms. Quote the voucher number on all documents.
+    {{ m.kv("Prepared by", po.prepared_by) }}
+  </div>
+  <div class="right">
+    <div>for {{ po.buyer_name }}</div>
+    <div class="sig-space"></div>
+    {{ m.kv("Approved by", po.approved_by) }}
+    <div>Authorised Signatory</div>
+  </div>
+</div>
+{% endblock %}

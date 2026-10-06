@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% block footer_note %}{{ po.buyer_name|css_string }}{% endblock %}
+
+{% block layout_css %}
+body { font: 8.4pt "Helvetica Neue", Helvetica, Arial, sans-serif; color: #2b2f36; }
+.top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 7mm; }
+.brand .party-name { font-size: 10pt; font-weight: 600; color: #2b2f36; }
+.brand .party { color: #6b7280; font-size: 7.8pt; line-height: 1.45; }
+h1 { font-size: 22pt; font-weight: 300; margin: 0 0 2mm; color: #4f7cac; letter-spacing: -.3px; }
+.vendor { width: 75mm; background: #f4f7fb; padding: 3mm 4mm; border-radius: 2mm; }
+.vendor .party-title { text-transform: uppercase; font-size: 6.8pt; letter-spacing: 1.2px; color: #8a94a6; margin-bottom: 1mm; }
+.vendor .party-name { font-weight: 600; }
+.kv .k { color: #8a94a6; }
+dl.meta { display: grid; grid-template-columns: 34mm 1fr 34mm 1fr; gap: 1mm 3mm; margin: 0 0 6mm; }
+dl.meta dt { color: #8a94a6; }
+dl.meta dd { margin: 0; font-weight: 500; }
+.addresses { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5mm; margin-bottom: 6mm; }
+.addresses .party-title { text-transform: uppercase; font-size: 6.8pt; letter-spacing: 1.2px; color: #8a94a6; margin-bottom: 1mm; }
+.addresses .party-name { font-weight: 600; }
+table.items th { text-align: left; font-weight: 500; color: #8a94a6; font-size: 7pt; text-transform: uppercase; letter-spacing: .6px; padding: 1.5mm 1.2mm; border-bottom: 1.5px solid #4f7cac; }
+table.items td { padding: 1.6mm 1.2mm; vertical-align: top; }
+table.items tbody tr:nth-child(even) td { background: #f7f9fc; }
+table.items .code { color: #8a94a6; font-size: 7pt; }
+table.items .tax { color: #6b7280; font-size: 7.2pt; white-space: nowrap; }
+.summary { display: grid; grid-template-columns: 1fr 72mm; gap: 8mm; margin-top: 6mm; }
+table.totals th { text-align: left; font-weight: 400; color: #6b7280; padding: .9mm 0; }
+table.totals td { padding: .9mm 0; }
+table.totals tr.grand_total th, table.totals tr.grand_total td { font-size: 11pt; font-weight: 600; color: #4f7cac; border-top: 1.5px solid #4f7cac; padding-top: 2mm; }
+.words { color: #6b7280; font-style: italic; margin-bottom: 3mm; }
+.notes .kv { margin-bottom: .8mm; }
+.signatures { display: flex; justify-content: space-between; margin-top: 10mm; color: #6b7280; }
+.sig-space { height: 10mm; }
+.right { text-align: right; }
+.tc-title { font-weight: 300; font-size: 14pt; color: #4f7cac; }
+ol.tc { color: #4b5563; line-height: 1.5; }
+{% endblock %}
+
+{% block content %}
+<div class="top">
+  <div class="brand">
+    <h1>Purchase Order</h1>
+    {{ m.party(parties.buyer) }}
+  </div>
+  <div class="vendor">{{ m.party(parties.vendor, "Vendor") }}</div>
+</div>
+
+<dl class="meta">
+  {% for label, value in [
+    ("PO Number", po.po_number), ("PO Date", d(po.po_date)),
+    ("Amendment", po.amendment_no), ("Amended On", d(po.amendment_date)),
+    ("Quote Ref", po.quotation_ref), ("Quote Date", d(po.quotation_date)),
+    ("Requisition", po.indent_no), ("Currency", po.currency),
+    ("Deliver By", d(po.delivery_date)), ("Valid Until", d(po.po_validity_date)),
+    ("Place of Supply", po.place_of_supply), ("Payment", po.payment_terms),
+  ] if value %}
+  <dt>{{ label }}</dt><dd>{{ value }}</dd>
+  {% endfor %}
+</dl>
+
+<div class="addresses">
+  {{ m.party(parties.bill_to, "Bill To") }}
+  {{ m.party(parties.ship_to, "Ship To") }}
+  <div class="notes">
+    {{ m.kv("Delivery Terms", po.delivery_terms) }}
+    {{ m.kv("Freight", po.freight_terms) }}
+    {{ m.kv("Transport", po.mode_of_transport) }}
+    {{ m.kv("Deliver At", po.delivery_location) }}
+  </div>
+</div>
+
+<table class="items">
+  <thead>
+    <tr>
+      <th>#</th><th>Item</th><th>HSN/SAC</th><th class="num">Qty</th><th class="num">Rate</th>
+      {% if cols.discount %}<th class="num">Disc</th>{% endif %}
+      <th class="num">Amount</th><th class="num">GST</th><th>Tax</th><th class="num">Total</th>
+      {% if cols.delivery_date %}<th>Due</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for i in po.line_items %}
+    <tr>
+      <td>{{ i.line_no }}</td>
+      <td>{{ i.description }}{% if i.item_code %}<div class="code">Code: {{ i.item_code }}</div>{% endif %}</td>
+      <td>{{ i.hsn_sac }}</td>
+      <td class="num">{{ i.quantity|qty }} {{ i.uom or "" }}</td>
+      <td class="num">{{ i.unit_rate|money }}</td>
+      {% if cols.discount %}<td class="num">{{ (i.discount_pct|pct ~ "%") if i.discount_pct is not none else "" }}</td>{% endif %}
+      <td class="num">{{ i.taxable_value|money }}</td>
+      <td class="num">{{ i.gst_rate|pct }}%</td>
+      <td class="tax">
+        {% if i.cgst_amount is not none %}CGST {{ (i.gst_rate / 2)|pct }}% · {{ i.cgst_amount|money }}<br>{% endif %}
+        {% if i.sgst_amount is not none %}SGST {{ (i.gst_rate / 2)|pct }}% · {{ i.sgst_amount|money }}{% endif %}
+        {% if i.igst_amount is not none %}IGST {{ i.gst_rate|pct }}% · {{ i.igst_amount|money }}{% endif %}
+      </td>
+      <td class="num">{{ i.line_total|money }}</td>
+      {% if cols.delivery_date %}<td>{{ d(i.line_delivery_date) }}</td>{% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="summary keep">
+  <div>
+    {% if po.amount_in_words %}<div class="words">{{ po.amount_in_words }}</div>{% endif %}
+    {{ m.kv("Warranty", po.warranty_terms) }}
+    {{ m.kv("Packing", po.packing_instructions) }}
+  </div>
+  {{ m.totals(po, [
+    ("subtotal", "Subtotal"), ("discount_total", "Discount"), ("freight_charges", "Freight"),
+    ("other_charges", "Other charges"), ("cgst_total", "CGST"), ("sgst_total", "SGST"),
+    ("igst_total", "IGST"), ("total_tax", "Total tax"), ("round_off", "Rounding"),
+    ("grand_total", "Total"),
+  ], currency="₹ ") }}
+</div>
+
+{{ m.signatures(po, prepared="Prepared by", approved="Approved by", signatory="Authorised signatory") }}
+{% endblock %}
