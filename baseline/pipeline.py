@@ -26,6 +26,7 @@ import pymupdf
 from pydantic import ValidationError
 
 from app.core.settings import Settings
+from app.extraction.llm_client import split_reasoning
 from eval.run_format import Status, TokenUsage
 from schema.llm_schemas import parse_llm_json
 from schema.po_schema import PurchaseOrder
@@ -146,19 +147,7 @@ def _without_image_data(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-_THINK = re.compile(r"^\s*<think>(.*?)</think>", re.DOTALL)
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
-
-
-def split_reasoning(message: dict[str, Any]) -> tuple[str, str]:
-    """(reasoning text, answer text). Reasoning is read from `reasoning_content`, or from a
-    leading <think>...</think> block if the server left it in the content."""
-    reasoning = message.get("reasoning_content") or ""
-    content = message.get("content") or ""
-    if match := _THINK.match(content):
-        reasoning = reasoning or match[1].strip()
-        content = content[match.end() :]
-    return reasoning, content
 
 
 def token_usage(usage: dict[str, Any], message: dict[str, Any]) -> TokenUsage:

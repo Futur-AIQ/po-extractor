@@ -31,6 +31,9 @@ def test_defaults_load_without_env_file() -> None:
     assert (s.po_fast, s.po_accurate, s.po_baseline) == ("po-fast", "po-accurate", "po-baseline")
     assert s.llm_concurrency == 32
     assert s.max_reasks == 1
+    assert (s.llm_profile_set, s.llm_timeout_s, s.llm_transient_retries) == ("dev", 120, 2)
+    assert (s.llm_max_tokens_header, s.llm_max_tokens_lines) == (2000, 6000)
+    assert s.llm_profiles_path.is_file()
     assert s.langfuse_host == "http://localhost:3000"
     assert s.langfuse_public_key == ""
     assert s.langfuse_secret_key.get_secret_value() == ""

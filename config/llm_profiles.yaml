@@ -1,0 +1,69 @@
+# Request profiles: the parameters the app sends with each LiteLLM model alias
+# (PRD FR-08, §9.5). Loaded by app/core/settings.py; LLM_PROFILE_SET picks the set:
+#   dev   llama.cpp on the Mac (infra/litellm/config.dev.yaml)
+#   h100  vLLM on the H100     (infra/litellm/config.h100.yaml)
+#
+# Per alias:
+#   body           fields added to the chat-completions request body as-is. LiteLLM forwards
+#                  them to the model server (drop_params: false, so nothing is silently lost).
+#                  The client sets model, messages, max_tokens and response_format itself;
+#                  they are not allowed here.
+#   send_priority  send vLLM's per-request "priority" (smaller = served first; needs vLLM
+#                  --scheduling-policy priority). llama.cpp has no such field.
+#                  VERIFY in Phase 7 that LiteLLM forwards "priority" to vLLM instead of
+#                  treating it as its own scheduler priority.
+#
+# Nothing model-specific is hard-coded in Python: changing a model's parameters is an edit here.
+
+anchors:
+  # FR-08: deterministic decoding for every extraction call.
+  deterministic: &deterministic
+    temperature: 0
+    presence_penalty: 0
+    repetition_penalty: 1.0
+
+  thinking_off: &thinking_off
+    chat_template_kwargs: {enable_thinking: false}
+
+  # llama.cpp: thinking on or off only, no effort levels.
+  thinking_on: &thinking_on
+    chat_template_kwargs: {enable_thinking: true}
+
+  # VERIFY against the Qwen3.8 model card / vLLM version in Phase 7.
+  # "Thinking on, low reasoning effort" for po-accurate on the H100. This is the ONLY place
+  # this request shape is defined; fix it here if the model or vLLM expects another form.
+  thinking_low: &thinking_low
+    chat_template_kwargs: {enable_thinking: true}
+    reasoning_effort: low
+
+profile_sets:
+  dev:
+    po-fast:
+      body: {<<: [*deterministic, *thinking_off]}
+      send_priority: false
+    po-accurate:
+      body: {<<: [*deterministic, *thinking_on]}
+      send_priority: false
+    po-baseline:
+      # Model defaults (thinking and sampling), like baseline B0. B0 itself builds its own
+      # request in baseline/pipeline.py; this profile is for any other po-baseline call.
+      body: {}
+      send_priority: false
+    po-moe:
+      # Request shape only: the dev LiteLLM config has no po-moe alias.
+      body: {<<: [*deterministic, *thinking_off]}
+      send_priority: false
+
+  h100:
+    po-fast:
+      body: {<<: [*deterministic, *thinking_off]}
+      send_priority: true
+    po-accurate:
+      body: {<<: [*deterministic, *thinking_low]}
+      send_priority: true
+    po-baseline:
+      body: {}
+      send_priority: false
+    po-moe:
+      body: {<<: [*deterministic, *thinking_off]}
+      send_priority: true

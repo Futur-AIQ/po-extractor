@@ -4,12 +4,49 @@ Every URL, port, key and model alias used by the app lives here. Defaults match 
 local Mac dev setup (see the Ports section of CLAUDE.md).
 """
 
+import copy
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field, SecretStr
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+# Request fields the LLM client always sets itself; a profile may not override them.
+RESERVED_REQUEST_FIELDS = frozenset(
+    {"model", "messages", "max_tokens", "response_format", "stream", "priority"}
+)
+
+
+class LlmProfile(BaseModel):
+    """Request parameters for one model alias (config/llm_profiles.yaml)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    body: dict[str, Any] = Field(default_factory=dict)  # added to the request body as-is
+    send_priority: bool = False  # send vLLM's per-request "priority"
+
+    @field_validator("body")
+    @classmethod
+    def _no_reserved_fields(cls, body: dict[str, Any]) -> dict[str, Any]:
+        reserved = sorted(RESERVED_REQUEST_FIELDS & body.keys())
+        if reserved:
+            raise ValueError(f"set by the client, not allowed in a profile: {reserved}")
+        return body
+
+
+def load_llm_profiles(path: Path, profile_set: str) -> dict[str, LlmProfile]:
+    """The request profiles of one set (`dev`, `h100`), keyed by model alias."""
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    sets = data.get("profile_sets") or {}
+    if profile_set not in sets:
+        raise ValueError(f"profile set {profile_set!r} not in {path} (have {sorted(sets)})")
+    # Deep copy: YAML anchors make profiles share nested dicts.
+    profiles = copy.deepcopy(sets[profile_set])
+    return {alias: LlmProfile.model_validate(profile) for alias, profile in profiles.items()}
 
 
 class Settings(BaseSettings):
@@ -39,6 +76,19 @@ class Settings(BaseSettings):
     po_fast: str = "po-fast"
     po_accurate: str = "po-accurate"
     po_baseline: str = "po-baseline"
+    po_moe: str = "po-moe"  # optional MoE candidate (H100 only)
+
+    # LLM requests (app/extraction/llm_client.py). Per-alias parameters (thinking, penalties,
+    # priority) come from the active set in config/llm_profiles.yaml.
+    llm_profile_set: Literal["dev", "h100"] = "dev"
+    llm_profiles_path: Path = PROJECT_ROOT / "config" / "llm_profiles.yaml"
+    llm_timeout_s: float = Field(default=120.0, gt=0, description="Timeout per LLM request")
+    llm_transient_retries: int = Field(
+        default=2, ge=0, description="Retries on timeout, connection error, 429 and 5xx"
+    )
+    llm_backoff_s: float = Field(default=1.0, ge=0, description="First retry delay; doubles")
+    llm_max_tokens_header: int = Field(default=2000, gt=0, description="Cap for header calls")
+    llm_max_tokens_lines: int = Field(default=6000, gt=0, description="Cap for line-item calls")
 
     # Extraction limits
     llm_concurrency: int = Field(default=32, gt=0, description="Global cap on in-flight LLM calls")
@@ -70,6 +120,10 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
+
+    def llm_profiles(self) -> dict[str, LlmProfile]:
+        """Request profiles of the active set (LLM_PROFILE_SET), keyed by model alias."""
+        return load_llm_profiles(self.llm_profiles_path, self.llm_profile_set)
 
 
 @lru_cache
