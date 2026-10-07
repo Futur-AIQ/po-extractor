@@ -12,9 +12,10 @@ from pathlib import Path
 
 import pytest
 
+from app.common.gst import is_valid_gstin, pan_from_gstin
 from datagen.consistency import check_po
 from datagen.generate import GeneratedPO, Knobs, generate_many
-from datagen.india import CATALOGUE, INDUSTRIAL_STATE_WEIGHTS, is_valid_gstin, pan_from_gstin
+from datagen.india import CATALOGUE, INDUSTRIAL_STATE_WEIGHTS
 from datagen.issuers import (
     DATE_STYLES,
     LAYOUT_IDS,

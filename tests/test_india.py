@@ -7,13 +7,13 @@ from decimal import Decimal
 
 import pytest
 
+from app.common.gst import STATES, gstin_check_char, is_valid_gstin, pan_from_gstin
 from datagen import india
 from datagen.india import (
     CATALOGUE,
     CITIES,
     GST_SLABS,
     INDUSTRIES,
-    STATES,
     UOMS,
     amount_in_words_inr,
     generate_address,
@@ -23,11 +23,8 @@ from datagen.india import (
     generate_item_code,
     generate_pan,
     generate_unit_price,
-    gstin_check_char,
-    is_valid_gstin,
     items_for,
     make_faker,
-    pan_from_gstin,
     pick_gst_rate,
     pick_industrial_state,
 )

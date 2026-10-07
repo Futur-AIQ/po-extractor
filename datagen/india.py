@@ -5,8 +5,8 @@ one seed. The global `random` module is never used. Faker (en_IN) is used only f
 names, phone numbers and email local parts, and is seeded from the same Random instance.
 
 Contents:
-    STATES / CITIES        GST state codes; real industrial cities, estates and PIN prefixes
-    GSTIN / PAN            generators with the official GSTIN mod-36 checksum, validators
+    CITIES                 real industrial cities, estates and PIN prefixes per state
+    GSTIN / PAN            generators (checksum and validators: app/common/gst.py)
     companies / addresses  names consistent with industry, addresses consistent with state
     CATALOGUE              ~120 items across 6 industries with HSN/SAC, UoM, price, GST rate
     GST_SLABS              configurable GST rates and weights
@@ -22,65 +22,11 @@ from decimal import Decimal
 from faker import Faker
 from num2words import num2words
 
+from app.common.gst import PAN_FORMAT, STATES, State, gstin_check_char
+
 # =========================================================================================
-# States and cities
+# Cities (GST state codes live in app/common/gst.py)
 # =========================================================================================
-
-
-@dataclass(frozen=True)
-class State:
-    """An Indian state or union territory with its official 2-digit GST state code."""
-
-    code: str
-    name: str
-
-
-# Official GST state codes (GSTN). Legacy codes 25 (Daman & Diu, merged into 26 in 2020) and
-# 28 (undivided Andhra Pradesh, now 37) are accepted by the validator but not generated.
-STATES: dict[str, State] = {
-    s.code: s
-    for s in [
-        State("01", "Jammu and Kashmir"),
-        State("02", "Himachal Pradesh"),
-        State("03", "Punjab"),
-        State("04", "Chandigarh"),
-        State("05", "Uttarakhand"),
-        State("06", "Haryana"),
-        State("07", "Delhi"),
-        State("08", "Rajasthan"),
-        State("09", "Uttar Pradesh"),
-        State("10", "Bihar"),
-        State("11", "Sikkim"),
-        State("12", "Arunachal Pradesh"),
-        State("13", "Nagaland"),
-        State("14", "Manipur"),
-        State("15", "Mizoram"),
-        State("16", "Tripura"),
-        State("17", "Meghalaya"),
-        State("18", "Assam"),
-        State("19", "West Bengal"),
-        State("20", "Jharkhand"),
-        State("21", "Odisha"),
-        State("22", "Chhattisgarh"),
-        State("23", "Madhya Pradesh"),
-        State("24", "Gujarat"),
-        State("26", "Dadra and Nagar Haveli and Daman and Diu"),
-        State("27", "Maharashtra"),
-        State("29", "Karnataka"),
-        State("30", "Goa"),
-        State("31", "Lakshadweep"),
-        State("32", "Kerala"),
-        State("33", "Tamil Nadu"),
-        State("34", "Puducherry"),
-        State("35", "Andaman and Nicobar Islands"),
-        State("36", "Telangana"),
-        State("37", "Andhra Pradesh"),
-        State("38", "Ladakh"),
-    ]
-}
-LEGACY_STATE_CODES = {"25", "28"}
-SPECIAL_STATE_CODES = {"97", "99"}  # 97 Other Territory, 99 Centre Jurisdiction
-VALID_GSTIN_STATE_CODES = set(STATES) | LEGACY_STATE_CODES | SPECIAL_STATE_CODES
 
 
 @dataclass(frozen=True)
@@ -192,10 +138,7 @@ def pick_industrial_state(rng: random.Random) -> State:
 # PAN and GSTIN
 # =========================================================================================
 
-_ALNUM36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 _LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-_GSTIN_FORMAT = re.compile(r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]")
-_PAN_FORMAT = re.compile(r"[A-Z]{5}[0-9]{4}[A-Z]")
 
 # PAN 4th character = holder type. C company, F firm/LLP, P individual (proprietor).
 PAN_COMPANY, PAN_FIRM, PAN_PERSON = "C", "F", "P"
@@ -215,17 +158,6 @@ def generate_pan(rng: random.Random, holder_type: str = PAN_COMPANY, name: str =
     return f"{series}{holder_type}{initial}{digits}{rng.choice(_LETTERS)}"
 
 
-def gstin_check_char(first14: str) -> str:
-    """Official GSTIN check character (mod 36) for the first 14 characters."""
-    if len(first14) != 14 or any(c not in _ALNUM36 for c in first14):
-        raise ValueError(f"expected 14 characters from 0-9A-Z, got {first14!r}")
-    total = 0
-    for index, char in enumerate(first14):
-        product = _ALNUM36.index(char) * (1 if index % 2 == 0 else 2)
-        total += product // 36 + product % 36
-    return _ALNUM36[(36 - total % 36) % 36]
-
-
 def generate_gstin(rng: random.Random, state_code: str, pan: str) -> str:
     """GSTIN = state code (2) + PAN (10) + entity number (1) + 'Z' + check character (1).
 
@@ -233,27 +165,11 @@ def generate_gstin(rng: random.Random, state_code: str, pan: str) -> str:
     """
     if state_code not in STATES:
         raise ValueError(f"unknown GST state code {state_code!r}")
-    if not _PAN_FORMAT.fullmatch(pan):
+    if not PAN_FORMAT.fullmatch(pan):
         raise ValueError(f"invalid PAN {pan!r}")
     entity = rng.choices("123", weights=[85, 10, 5])[0]
     first14 = f"{state_code}{pan}{entity}Z"
     return first14 + gstin_check_char(first14)
-
-
-def is_valid_gstin(gstin: str) -> bool:
-    """True if `gstin` has the GSTIN format, a known state code and a correct check character."""
-    if not isinstance(gstin, str) or not _GSTIN_FORMAT.fullmatch(gstin):
-        return False
-    if gstin[:2] not in VALID_GSTIN_STATE_CODES:
-        return False
-    return gstin_check_char(gstin[:14]) == gstin[14]
-
-
-def pan_from_gstin(gstin: str) -> str:
-    """The PAN embedded in a GSTIN (characters 3-12). Raises ValueError if the GSTIN is invalid."""
-    if not is_valid_gstin(gstin):
-        raise ValueError(f"invalid GSTIN {gstin!r}")
-    return gstin[2:12]
 
 
 # =========================================================================================

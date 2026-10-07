@@ -15,7 +15,8 @@ import re
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
-from datagen.india import STATES, amount_in_words_inr, is_valid_gstin
+from app.common.gst import STATES, is_valid_gstin
+from datagen.india import amount_in_words_inr
 from schema.po_schema import LineItem, PurchaseOrder
 
 PAISA = Decimal("0.01")
