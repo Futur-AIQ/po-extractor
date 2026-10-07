@@ -1,4 +1,7 @@
-# Phase 1 — Schema & synthetic data (Claude Code prompts)
+# Phase 1 — Schema & synthetic data (Claude Code prompts) — v1.1
+
+> Steps 1.1–1.4 are complete. Continue with **1.4a → 1.4b → 1.5 → 1.6** below
+> (these reflect PRD v1.1: computed fields, short keys, issuer pool, ERP masters, scanned twins).
 
 Goal: a realistic, varied, internally consistent set of Indian GST purchase orders (2–3 page PDFs)
 with exact ground-truth JSON. This dataset is the foundation for evaluation and benchmarking.
@@ -163,64 +166,143 @@ Finish with a summary and how to open the previews.
 
 ---
 
-## Step 1.5 — PDF rendering + dataset build CLI
+## Step 1.4a — Schema patch: computed fields, short keys, LLM schemas
 
 ```
-Read CLAUDE.md and docs/PRD.md section 11.1. Read datagen/.
+Read CLAUDE.md, docs/PRD.md (v1.1) sections 6.3 and 9.3. Read the existing schema/ package.
 
-Implement Step 1.5 only.
+Implement Step 1.4a only: extend the schema for the v1.1 LLM output contract. Do not break existing
+APIs or tests from Step 1.1; extend them.
 
 Tasks:
-1. datagen/render.py: async Playwright (Chromium) renderer — one browser, multiple pages concurrently —
-   HTML → A4 PDF with backgrounds printed. Return PDF bytes.
-2. Page-count control: after rendering, count pages with PyMuPDF. Target 2–3 pages
-   (allow 4 only for layouts with a T&C page). If outside range, adjust the line count and regenerate
-   (deterministically, from the same seed) — max 5 attempts, then log and skip.
-3. Record per-page line mapping: using PyMuPDF text search, store which line_no values appear on
-   each page (truth metadata used later for per-page evaluation and debugging).
-4. datagen/build.py CLI: `uv run python -m datagen.build --n 60 --seed 42 --out data/synthetic`
-   - layouts assigned round-robin (10 per layout)
-   - writes pdfs/PO_0001.pdf, truth/PO_0001.json (PurchaseOrder + meta: layout, knobs, seed,
-     page_count, lines_per_page), manifest.csv
-   - splits.json: dev (10 POs, at least one per layout) and test (50), stratified by layout
-   - preview.html: thumbnail grid of page 1 of every PO (PyMuPDF render) for quick visual QA
-5. Makefile: `make dataset` (also runs `uv run playwright install chromium` if needed).
-6. Tests: build 3 POs into a temp dir; PDFs open; page counts in range; truth validates with
-   datagen/consistency.py; text extracted from each PDF contains the PO number and grand total
-   (in Indian format) — proves the truth matches what is printed.
+1. schema/fields.py additions:
+   - COMPUTED_FIELDS: header {"total_tax"} and line items {"cgst_amount", "sgst_amount", "igst_amount"}.
+     These are never requested from the model; they are computed in code later (Step 3.6).
+   - HEADER_FIELDS_FOR_LLM: all 58 header fields minus computed ones.
+   - LLM_LINE_ITEM_COLUMNS: LINE_ITEM_COLUMNS minus computed ones, same relative order.
+2. schema/llm_keys.py:
+   - SHORT_KEYS: full field name → short key (max 8 chars, unique, still readable, e.g. po_no, po_dt,
+     v_gstin, b_gstin, st_gstin, gr_total). Reverse map built automatically. Test: unique and complete.
+   - to_full_keys(dict) and to_short_keys(dict).
+3. schema/llm_schemas.py additions (keep existing functions):
+   - header_schema_for_llm(): one flat JSON schema with ALL header fields for the LLM (short keys,
+     descriptions kept meaningful and including label synonyms), all optional, absent fields omitted.
+   - line_items_schema_for_llm(): {"rows": [[...]]} using LLM_LINE_ITEM_COLUMNS.
+   - line_item_columns_instruction(): a short text listing the column order with one-line meanings
+     (used later inside the prompt instead of repeating keys in every row).
+   - rows_to_line_items(rows, columns=LLM_LINE_ITEM_COLUMNS) works with the reduced column list;
+     computed columns are left None for later computation.
+4. Tests: computed fields absent from both LLM schemas; short-key round trip on a full PurchaseOrder;
+   reduced row round trip; schemas use only simple JSON-schema keywords accepted by vLLM and llama.cpp.
 
 Finish with a summary and verification commands.
 ```
 
-**Verify:** `make dataset`, open `data/synthetic/preview.html`, open 2–3 PDFs and compare against their truth JSON.
+**Verify:** `make test`
 
 ---
 
-## Step 1.6 — Scanned variants + public dataset downloads
+## Step 1.4b — Generator patch: issuer pool, line counts, mock ERP masters [plan]
 
 ```
-Read CLAUDE.md and docs/PRD.md section 11.1. Read datagen/.
+Read CLAUDE.md, docs/PRD.md (v1.1) sections 5, 9.4 (rule 10) and 11.1. Read datagen/.
 
-Implement Step 1.6 only. Add pillow and numpy as dependencies if not present.
+Implement Step 1.4b only: make the generated data reflect the confirmed real-world distribution.
+Keep all existing consistency tests passing.
 
 Tasks:
-1. datagen/scanify.py: convert a digital PDF into a realistic image-only "scanned" PDF:
-   render each page at 150 DPI, slight random rotation (±1°), mild noise, slight blur, JPEG compression,
-   then rebuild a PDF of images (no text layer). Seeded.
-   CLI: `uv run python -m datagen.scanify --src data/synthetic --n 10 --out data/synthetic_scanned`
-   picks 10 POs from the test split (spread across layouts) and copies their truth files.
-   Test: output PDF has no extractable text; page count unchanged.
-2. scripts/download_public.py:
-   - Northwind: huggingface_hub snapshot_download of dataset AyoubChLin/northwind_PurchaseOrders
-     into data/northwind/.
-   - FATURA: stream-download https://zenodo.org/records/10371464/files/FATURA2.zip?download=1
-     to data/fatura/ with a progress bar, verify MD5 4c9404462f22c5241eb1a290a02eb2a2, unzip,
-     then copy a sample of 50 images (one per template, white background) plus their annotation files
-     into data/fatura/sample_50/. Skip steps already completed (idempotent).
-   - Print a summary of what was downloaded. Add a note in README crediting FATURA (CC BY 4.0) and Northwind.
-3. Makefile: `make scanned`, `make public-data`.
+1. datagen/issuers.py:
+   - A fixed, seeded pool of 30 FREQUENT issuers (the company whose ERP produced the PO). Each has:
+     id, company profile (name, GSTIN, PAN, address, state), an assigned layout (5 issuers per layout,
+     L1–L6), its own PO-number format, and its own date format preference.
+     The pool must be identical across runs (own fixed seed), independent of the dataset seed.
+   - A fixed, seeded pool of ~40 counterparties (the other party on the PO).
+   - make_one_off_issuer(rng): a random issuer with a random layout.
+2. Knobs additions: frequent_issuer_share (default 0.70); line count drawn from 20–80 with most POs
+   in 30–50; duplicate_po_count (default 2): POs whose number is deliberately pre-registered as
+   "already processed" in the masters.
+3. generate_po() uses the issuer's profile, layout, PO-number format and date format. If templates
+   already fix date formats per layout, keep that and store the issuer's format only as metadata.
+4. datagen/masters.py: build_masters(pos, issuers, counterparties, catalogue) →
+   parties.json (name, GSTIN, state code for every party appearing in the dataset),
+   items.json (all item codes in the catalogue), processed_po_numbers.json (a few hundred plausible
+   historical PO numbers per frequent issuer + the deliberate duplicates).
+   Truth meta gains: issuer_id, issuer_frequent (bool), expected_duplicate (bool).
+5. Tests: issuer pool stable across runs; frequent share ≈ 70% over 500 POs; every party and item in
+   generated POs exists in the masters; exactly duplicate_po_count POs are expected duplicates;
+   all existing consistency tests still pass.
 
-Do not convert FATURA annotations into our schema (not needed now).
+Do not render PDFs (Step 1.5).
+Finish with a summary and verification commands.
+```
+
+**Verify:** `make test`
+
+---
+
+## Step 1.5 — PDF rendering + dataset build CLI (v1.1)
+
+```
+Read CLAUDE.md and docs/PRD.md (v1.1) section 11.1. Read datagen/.
+
+Implement Step 1.5 only.
+
+Tasks:
+1. datagen/render.py: async Playwright (Chromium) renderer — one browser, several pages concurrently —
+   HTML → A4 PDF with backgrounds. Return PDF bytes.
+2. Page-count control with PyMuPDF: target 2–4 pages; 5 allowed only when a T&C page is present.
+   If outside range, adjust the line count deterministically (same seed) and regenerate, max 5 attempts,
+   then log and skip.
+3. Per-page truth metadata via PyMuPDF text search: which line_no values appear on each page, and which
+   pages contain no extractable fields (e.g. T&C pages).
+4. datagen/build.py CLI: `uv run python -m datagen.build --n 60 --seed 42 --out data/synthetic`
+   - layout comes from the issuer (frequent issuers fixed; one-off issuers random); ensure each layout
+     appears at least 6 times (rebalance one-off issuers if needed)
+   - writes pdfs/PO_0001.pdf, truth/PO_0001.json (PurchaseOrder + meta: issuer_id, issuer_frequent,
+     expected_duplicate, layout, knobs, seed, page_count, lines_per_page, fieldless_pages),
+     masters/ (from Step 1.4b), manifest.csv
+   - splits.json: dev 10 POs (at least one per layout) and test 50, stratified by layout
+   - preview.html: thumbnail grid of page 1 of every PO for visual QA
+5. Makefile: `make dataset` (runs `uv run playwright install chromium` if needed).
+6. Tests: build 3 POs into a temp dir; PDFs open; page counts in range; truth passes
+   datagen/consistency.py; extracted PDF text contains the PO number and the grand total in Indian format.
+
+Finish with a summary and verification commands.
+```
+
+**Verify:** `make dataset`, open `data/synthetic/preview.html`, compare 2–3 PDFs with their truth JSON.
+
+---
+
+## Step 1.6 — Scanned twins, mixed POs, public datasets (v1.1)
+
+```
+Read CLAUDE.md and docs/PRD.md (v1.1) sections 5 and 11.1. Read datagen/.
+Add pillow and numpy if not present.
+
+Implement Step 1.6 only.
+
+Tasks:
+1. datagen/scanify.py: convert a native PDF page into a realistic scanned page: rasterise at 200 dpi
+   (typical scanner resolution), slight random rotation (±1°), mild noise and blur, JPEG compression,
+   and rebuild as image-only PDF pages (no text layer). Seeded.
+2. Scanned twins: for EVERY PO in data/synthetic, create data/synthetic/pdfs/PO_0001_S.pdf with the same
+   truth (truth file references the twin; meta page kinds all "scanned").
+3. Mixed POs: for 10 POs (spread across layouts, from the test split), create PO_00xx_M.pdf where 1–2
+   random pages are scanned and the rest stay native; record page kinds in the truth meta.
+4. Update manifest.csv and splits.json so each split lists native, scanned twin and mixed variants
+   (variant column: N / S / M). Benchmark mixes can then sample 50/50 native-scanned.
+5. CLI: `uv run python -m datagen.scanify --src data/synthetic` (idempotent); Makefile `make scanned`.
+6. scripts/download_public.py (idempotent):
+   - Northwind: huggingface_hub snapshot_download of dataset AyoubChLin/northwind_PurchaseOrders → data/northwind/
+   - FATURA: stream https://zenodo.org/records/10371464/files/FATURA2.zip?download=1 to data/fatura/ with
+     progress, verify MD5 4c9404462f22c5241eb1a290a02eb2a2, unzip, copy a 50-image sample (one per template,
+     white background) with annotations to data/fatura/sample_50/
+   - README credits: FATURA (CC BY 4.0), Northwind dataset.
+   Makefile `make public-data`.
+7. Tests: twin PDFs have no extractable text and the same page count; mixed PDFs have the recorded
+   page kinds (text present only on native pages).
+
 Finish with a summary and verification commands.
 ```
 
