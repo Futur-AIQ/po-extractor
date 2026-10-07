@@ -532,13 +532,21 @@ def aggregate_run(
     )
 
 
-def score_run(run_dir: Path, dataset_dir: Path, include_computed: bool = True) -> RunScore:
+def score_run(
+    run_dir: Path,
+    dataset_dir: Path,
+    include_computed: bool = True,
+    doc_ids: set[str] | None = None,
+) -> RunScore:
     """Score every document listed in the run's records.jsonl against the dataset truth.
 
     A document without a PO in outputs/ (parse_error, failed) scores as all-missed.
+    `doc_ids` limits scoring to those documents (e.g. the ones two compared runs share).
     """
     docs = {doc.doc_id: doc for doc in load_dataset(dataset_dir)}
     records = read_records(run_dir)
+    if doc_ids is not None:
+        records = [r for r in records if r.doc_id in doc_ids]
     unknown = [r.doc_id for r in records if r.doc_id not in docs]
     if unknown:
         raise ValueError(f"documents not in {dataset_dir / 'manifest.csv'}: {unknown[:5]}")

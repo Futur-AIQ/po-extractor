@@ -129,3 +129,17 @@ Results go to `runs/<run_id>/` in the standard run format (`eval/run_format.py`)
 timings, tokens per document). llama.cpp does not report reasoning tokens, so they are estimated
 from the reasoning text's share of the output and flagged `reasoning_estimated`. On the Mac the
 9B model with thinking on can take minutes per PO; the full baseline runs on the H100.
+
+## Evaluation
+
+```bash
+make eval RUN=runs/<run_id>                      # report.md, report.json, errors.csv in the run folder
+make compare REF=runs/<A> CAND=runs/<B>          # side-by-side + PRD §11.3 ACCEPT / REJECT -> <B>/compare.md
+uv run python scripts/make_oracle_run.py --split dev   # runs/oracle_dev: outputs = truth (scores 100%)
+```
+
+The report gives critical-field document accuracy, field accuracy (header fields + cells of
+matched rows), line-item recall / precision / F1 and per-column accuracy, overall and by variant
+(N / S / M), layout and issuer type; latency p50 / p95 / max, mean tokens and parse errors; and the
+top 10 problem fields with examples. `compare` scores both runs on the documents they share and
+accepts a change only if critical-doc accuracy drops ≤ 0.5 pp and field accuracy ≤ 1 pp.

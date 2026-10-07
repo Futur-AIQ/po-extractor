@@ -1,4 +1,4 @@
-.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100 doctor dataset scanned public-data baseline
+.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100 doctor dataset scanned public-data baseline eval compare
 
 COMPOSE := docker compose -f infra/docker-compose.yml
 
@@ -91,3 +91,11 @@ RUN_ID ?=
 baseline:  ## Baseline B0 run, e.g. make baseline SPLIT=dev VARIANTS=N,S LIMIT=3 [RUN_ID=b0_dev_local]
 	uv run python -m baseline.run --split $(SPLIT) --variants $(VARIANTS) \
 		--concurrency $(CONCURRENCY) $(if $(LIMIT),--limit $(LIMIT)) $(if $(RUN_ID),--run-id $(RUN_ID))
+
+eval:  ## Score a run and write report.md/json + errors.csv, e.g. make eval RUN=runs/oracle_dev
+	@test -n "$(RUN)" || { echo "usage: make eval RUN=runs/<run_id>"; exit 2; }
+	uv run python -m eval.report --run $(RUN)
+
+compare:  ## Compare runs + PRD 11.3 accept rule, e.g. make compare REF=runs/<A> CAND=runs/<B>
+	@test -n "$(REF)" -a -n "$(CAND)" || { echo "usage: make compare REF=runs/<A> CAND=runs/<B>"; exit 2; }
+	uv run python -m eval.compare --ref $(REF) --cand $(CAND)
