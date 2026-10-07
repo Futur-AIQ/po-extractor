@@ -452,7 +452,8 @@ class LatencySummary:
     max_ms: float | None
     mean_prompt_tokens: float | None
     mean_completion_tokens: float | None
-    mean_reasoning_tokens: float | None  # over docs whose server reported it
+    mean_reasoning_tokens: float | None  # over docs where it is known
+    reasoning_estimated: bool  # some reasoning counts are estimates (see TokenUsage)
     mean_calls: float | None
     parse_errors: int
 
@@ -468,6 +469,7 @@ def summarize_latency(records: list[DocRecord]) -> LatencySummary:
         mean_prompt_tokens=_mean([r.tokens.prompt for r in records]),
         mean_completion_tokens=_mean([r.tokens.completion for r in records]),
         mean_reasoning_tokens=_mean(reasoning),
+        reasoning_estimated=any(r.tokens.reasoning_estimated for r in records),
         mean_calls=_mean([r.calls for r in records]),
         parse_errors=sum(r.status == "parse_error" for r in records),
     )

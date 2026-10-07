@@ -27,6 +27,9 @@ model_list:
       model: openai/local-qwen
       api_base: http://127.0.0.1:8081/v1
       api_key: sk-no-key-required
+      # Baseline B0 reproduces today's long thinking-mode requests (16000 max_tokens):
+      # this per-model timeout overrides request_timeout below (baseline/run.py --timeout).
+      timeout: 600
 
 litellm_settings:
   # Generous for a ~8B model on a laptop; the H100 config uses a tighter value.

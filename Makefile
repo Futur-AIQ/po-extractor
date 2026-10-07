@@ -1,4 +1,4 @@
-.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100 doctor dataset scanned public-data
+.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100 doctor dataset scanned public-data baseline
 
 COMPOSE := docker compose -f infra/docker-compose.yml
 
@@ -60,7 +60,7 @@ langfuse-down:  ## Stop Langfuse (data volumes are kept)
 langfuse-logs:  ## Follow Langfuse logs
 	$(LANGFUSE_COMPOSE) logs -f
 
-model:  ## Start local llama.cpp server on :8081 (model from LOCAL_GGUF in .env)
+model:  ## Start local llama.cpp on :8081 (LOCAL_GGUF from .env; env PARALLEL=4 CTX_SIZE=32768)
 	infra/llamacpp/start.sh
 
 litellm:  ## Start LiteLLM proxy on :4000 with the dev config (routes to llama.cpp)
@@ -81,3 +81,13 @@ scanned:  ## Scanned twins for every PO + 10 mixed POs (needs make dataset first
 
 public-data:  ## Download Northwind (Hugging Face) and FATURA (Zenodo, ~690 MB) into data/
 	uv run python -m scripts.download_public
+
+# Baseline B0 (needs `PARALLEL=1 CTX_SIZE=32768 make model` and `make litellm`).
+SPLIT ?= dev
+VARIANTS ?= N,S
+LIMIT ?=
+CONCURRENCY ?= 1
+RUN_ID ?=
+baseline:  ## Baseline B0 run, e.g. make baseline SPLIT=dev VARIANTS=N,S LIMIT=3 [RUN_ID=b0_dev_local]
+	uv run python -m baseline.run --split $(SPLIT) --variants $(VARIANTS) \
+		--concurrency $(CONCURRENCY) $(if $(LIMIT),--limit $(LIMIT)) $(if $(RUN_ID),--run-id $(RUN_ID))

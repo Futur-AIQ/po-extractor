@@ -70,8 +70,9 @@ class TokenUsage(BaseModel):
     """Token counts summed over all LLM calls of one document."""
 
     prompt: int = 0
-    completion: int = 0
-    reasoning: int | None = None  # only when the server reports it
+    completion: int = 0  # all generated tokens, reasoning included
+    reasoning: int | None = None  # None when unknown
+    reasoning_estimated: bool = False  # True: derived from the reasoning text, not reported
 
 
 class DocRecord(BaseModel):
@@ -106,7 +107,7 @@ class RunOutput(BaseModel):
 
     doc_id: str
     status: Status
-    po: dict[str, Any] | None = None  # JSON of the PO; may be partial (needs_review)
+    po: dict[str, Any] | None = None  # JSON of the PO; may be partial or schema-invalid
     error: str | None = None
 
 
@@ -167,12 +168,19 @@ class RunWriter:
         return cls(run_dir)
 
     def write_output(
-        self, doc_id: str, po: PurchaseOrder | dict[str, Any], status: Status = "completed"
+        self,
+        doc_id: str,
+        po: PurchaseOrder | dict[str, Any],
+        status: Status = "completed",
+        error: str | None = None,
     ) -> None:
-        """Save the final PO in full field names."""
+        """Save the final PO in full field names. A dict that is not a valid PurchaseOrder
+        (e.g. status parse_error after schema validation) is saved as-is with its error, so
+        the values the model did read can still be scored."""
         data = po.model_dump(mode="json") if isinstance(po, PurchaseOrder) else po
-        output = RunOutput(doc_id=doc_id, status=status, po=data)
-        _write_json(self.run_dir / "outputs" / f"{doc_id}.json", output.model_dump(mode="json"))
+        output = RunOutput(doc_id=doc_id, status=status, po=data, error=error)
+        path = self.run_dir / "outputs" / f"{doc_id}.json"
+        _write_json(path, output.model_dump(mode="json"))
 
     def write_error(self, doc_id: str, status: Status, error: str) -> None:
         """Save an error record in place of a PO (e.g. parse_error)."""

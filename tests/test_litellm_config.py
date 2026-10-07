@@ -31,3 +31,9 @@ def test_config_defines_app_aliases(name: str) -> None:
 def test_dev_config_routes_everything_to_local_llamacpp() -> None:
     for model in load("config.dev.yaml")["model_list"]:
         assert model["litellm_params"]["api_base"] == "http://127.0.0.1:8081/v1"
+
+
+@pytest.mark.parametrize("name", ["config.dev.yaml", "config.h100.yaml"])
+def test_baseline_alias_allows_long_requests(name: str) -> None:
+    models = {m["model_name"]: m["litellm_params"] for m in load(name)["model_list"]}
+    assert models["po-baseline"]["timeout"] >= 600  # baseline default --timeout

@@ -38,6 +38,9 @@ model_list:
       model: hosted_vllm/Qwen/Qwen3.8-27B
       api_base: http://localhost:8000/v1
       api_key: os.environ/VLLM_API_KEY
+      # Baseline B0 reproduces today's long thinking-mode requests (16000 max_tokens):
+      # this per-model timeout overrides request_timeout below (baseline/run.py --timeout).
+      timeout: 600
 
 litellm_settings:
   # TODO(Phase 7): tune against the latency budget (slowest sub-request <= 20 s, p95 < 30 s).
