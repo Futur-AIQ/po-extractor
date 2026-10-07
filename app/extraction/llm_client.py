@@ -35,7 +35,8 @@ from schema.llm_schemas import parse_llm_json
 
 log = get_logger(__name__)
 
-ErrorKind = Literal["transient", "api", "truncated", "invalid_json"]
+# "internal": an unexpected exception around the call (orchestrator), not an API error.
+ErrorKind = Literal["transient", "api", "truncated", "invalid_json", "internal"]
 
 
 @dataclass(frozen=True)

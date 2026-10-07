@@ -90,7 +90,15 @@ class Settings(BaseSettings):
     llm_max_tokens_header: int = Field(default=2000, gt=0, description="Cap for header calls")
     llm_max_tokens_lines: int = Field(default=6000, gt=0, description="Cap for line-item calls")
 
-    # Extraction limits
+    # Call planning (app/extraction/planner.py, PRD FR-07): two_call = header + line items,
+    # per_page = header + one line-item call per item page, adaptive = two_call unless the PO
+    # has more than adaptive_row_threshold estimated rows or adaptive_page_threshold item pages.
+    call_strategy: Literal["two_call", "per_page", "adaptive"] = "adaptive"
+    adaptive_row_threshold: int = Field(default=40, ge=0)
+    adaptive_page_threshold: int = Field(default=2, ge=0)
+
+    # Extraction limits. llm_concurrency caps in-flight LLM calls per process; keep it at or
+    # below vLLM --max-num-seqs, and never set LiteLLM limits lower than it (PRD FR-15).
     llm_concurrency: int = Field(default=32, gt=0, description="Global cap on in-flight LLM calls")
     max_reasks: int = Field(default=1, ge=0, description="Targeted re-asks per PO on failure")
 
