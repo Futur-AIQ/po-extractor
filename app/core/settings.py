@@ -125,6 +125,8 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     runs_dir: Path = Path("runs")  # extraction runs for evaluation (eval/run_format.py)
     sqlite_path: Path = Path("data/po_extractor.db")
+    # Mock ERP master data for validation rule 10 (parties, item codes, processed PO numbers).
+    masters_dir: Path = Path("data/synthetic/masters")
 
     # Logging
     log_level: str = "INFO"

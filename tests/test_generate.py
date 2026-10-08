@@ -8,8 +8,8 @@ from decimal import Decimal
 
 import pytest
 
-from app.common.gst import pan_from_gstin
-from datagen.consistency import check_po, state_code_from_address, state_code_from_place
+from app.common.gst import pan_from_gstin, state_code_from_place
+from datagen.consistency import check_po, state_code_from_address
 from datagen.generate import DROPPABLE_FIELDS, GeneratedPO, Knobs, generate_many, generate_po
 from schema.po_schema import PurchaseOrder
 

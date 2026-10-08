@@ -27,8 +27,8 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from faker import Faker
 
+from app.common.money import RUPEE, ZERO, round_money
 from datagen import india
-from datagen.consistency import RUPEE, ZERO, round_money
 from datagen.india import CatalogueItem
 from datagen.issuers import (
     Counterparty,

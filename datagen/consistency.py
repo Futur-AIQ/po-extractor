@@ -11,32 +11,21 @@ Totals follow the PRD §9.4 formula: freight, other charges and the header disco
 adjustments in the totals block, outside the GST computation.
 """
 
-import re
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
-from app.common.gst import STATES, is_valid_gstin
+from app.common.gst import STATES, STATES_BY_NAME, is_valid_gstin, state_code_from_place
+from app.common.money import RUPEE, ZERO, round_money
 from datagen.india import amount_in_words_inr
 from schema.po_schema import LineItem, PurchaseOrder
 
-PAISA = Decimal("0.01")
-RUPEE = Decimal("1")
-ZERO = Decimal("0.00")
 MAX_ROUND_OFF = Decimal("0.50")
-
-
-def round_money(value: Decimal) -> Decimal:
-    """Round to 2 decimal places, half up (the convention on Indian tax documents)."""
-    return value.quantize(PAISA, rounding=ROUND_HALF_UP)
 
 
 def expected_taxable_value(item: LineItem) -> Decimal:
     """qty x rate x (1 - discount%/100), rounded to paise."""
     discount = item.discount_pct or Decimal(0)
     return round_money(item.quantity * item.unit_rate * (1 - discount / 100))
-
-
-_STATES_BY_NAME = {state.name.lower(): state.code for state in STATES.values()}
 
 
 def state_code_from_address(address: str | None) -> str | None:
@@ -46,18 +35,7 @@ def state_code_from_address(address: str | None) -> str | None:
     """
     if not address:
         return None
-    return _STATES_BY_NAME.get(address.rsplit(",", 1)[-1].strip().lower())
-
-
-def state_code_from_place(place: str | None) -> str | None:
-    """State code of a place of supply: '27-Maharashtra', 'Maharashtra (27)' or 'Maharashtra'."""
-    if not place:
-        return None
-    for code in re.findall(r"\b(\d{2})\b", place):
-        if code in STATES:
-            return code
-    name = re.sub(r"[\d()\-]", " ", place).strip().lower()
-    return _STATES_BY_NAME.get(" ".join(name.split()))
+    return STATES_BY_NAME.get(address.rsplit(",", 1)[-1].strip().lower())
 
 
 def check_po(po: PurchaseOrder) -> list[str]:

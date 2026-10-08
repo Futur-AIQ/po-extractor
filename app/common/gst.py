@@ -62,6 +62,7 @@ STATES: dict[str, State] = {
 LEGACY_STATE_CODES = {"25", "28"}
 SPECIAL_STATE_CODES = {"97", "99"}  # 97 Other Territory, 99 Centre Jurisdiction
 VALID_GSTIN_STATE_CODES = set(STATES) | LEGACY_STATE_CODES | SPECIAL_STATE_CODES
+STATES_BY_NAME = {state.name.lower(): state.code for state in STATES.values()}
 
 _ALNUM36 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 GSTIN_FORMAT = re.compile(r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]")
@@ -106,3 +107,14 @@ def is_valid_pan(pan: str) -> bool:
     The last character's algorithm is not public, so it cannot be checked.
     """
     return isinstance(pan, str) and bool(PAN_FORMAT.fullmatch(pan)) and pan[3] in PAN_HOLDER_TYPES
+
+
+def state_code_from_place(place: str | None) -> str | None:
+    """State code of a place of supply: '27-Maharashtra', 'Maharashtra (27)' or 'Maharashtra'."""
+    if not place:
+        return None
+    for code in re.findall(r"\b(\d{2})\b", place):
+        if code in STATES:
+            return code
+    name = re.sub(r"[\d()\-]", " ", place).strip().lower()
+    return STATES_BY_NAME.get(" ".join(name.split()))
