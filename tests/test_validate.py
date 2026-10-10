@@ -293,6 +293,12 @@ def test_totals_round_off_limit() -> None:
     assert not c.passed and "round_off" in c.fields
 
 
+def test_totals_with_a_row_gap_retries_only_that_page() -> None:
+    report = run(build(drop=(4,)))  # row 4 of page 2 dropped: the subtotal no longer adds up
+    assert check(report, "totals").retry_target == "LI-p2"
+    assert check(report, "continuity").retry_target == "LI-p2"
+
+
 def test_totals_dropped_last_row_is_caught() -> None:
     report = run(build(drop=(5,)))
     assert check(report, "continuity").passed  # no gap: rows 1-4 are continuous

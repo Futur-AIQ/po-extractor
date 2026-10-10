@@ -101,6 +101,11 @@ class Settings(BaseSettings):
     # below vLLM --max-num-seqs, and never set LiteLLM limits lower than it (PRD FR-15).
     llm_concurrency: int = Field(default=32, gt=0, description="Global cap on in-flight LLM calls")
     max_reasks: int = Field(default=1, ge=0, description="Targeted re-asks per PO on failure")
+    # A retry starts only before this many seconds since the PO started, so a retry never
+    # pushes a PO past the 60 s ceiling (PRD §3); later failures go to review instead.
+    retry_deadline_s: float = Field(default=40.0, ge=0)
+    # Extra max_tokens for a retry call on po-accurate: its thinking counts as output tokens.
+    llm_retry_reasoning_tokens: int = Field(default=4000, ge=0)
 
     # Pre-processing (app/extraction/preprocess.py)
     native_min_chars: int = Field(

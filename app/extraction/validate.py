@@ -241,7 +241,11 @@ def check_line_arithmetic(merged: MergedPO) -> CheckResult:
 
 def check_totals(merged: MergedPO) -> CheckResult:
     """Rule 5: totals agree with the lines; grand total = subtotal + taxes + charges - discount
-    + round off; |round off| <= 1."""
+    + round off; |round off| <= 1.
+
+    Retry target: "both" when the lines disagree with the totals; only the line calls when
+    rows are visibly incomplete (that explains the difference); "H" for header-only sums.
+    """
     h, items = merged.header, merged.items
     lines_vs_header, header_only, fields = [], [], []
     if items and "subtotal" in h:
@@ -272,32 +276,55 @@ def check_totals(merged: MergedPO) -> CheckResult:
         fields.append("round_off")
     if not lines_vs_header and not header_only:
         return _passed("totals")
-    target = "both" if lines_vs_header else "H"
+    # Lines that disagree with the totals point at both calls, unless rows are visibly
+    # incomplete (a gap, a bad row): then the missing rows explain it and their calls are
+    # re-run. If the header was wrong too, the PO still fails after the retry: review.
+    rows_target = _incomplete_rows_target(merged) if lines_vs_header else None
+    if rows_target and not header_only:
+        target = rows_target
+    elif lines_vs_header:
+        target = "both"
+    else:
+        target = "H"
     detail = _summary(lines_vs_header + header_only)
     return CheckResult("totals", False, tuple(dict.fromkeys(fields)), detail, target)
 
 
-def check_continuity(merged: MergedPO) -> CheckResult:
-    """Rule 6: line numbers run 1, 2, 3 ... (or 10, 20, 30 ...) with no gaps."""
+def _gaps(merged: MergedPO) -> tuple[list[int], int, set[str]]:
+    """(missing line numbers, step, calls that produced the rows around each gap)."""
     numbers = [item.line_no for item in merged.items]
     if not numbers:
-        return CheckResult("continuity", False, ("line_items",), "no line items", "LI")
+        return [], 1, set()
     step = 10 if all(n % 10 == 0 for n in numbers) else 1
     present = set(numbers)
     missing = [n for n in range(step, max(numbers) + 1, step) if n not in present]
-    if not missing:
-        return _passed("continuity", f"{len(numbers)} rows, step {step}")
     neighbours = set()
     for gap in missing:
         before = [n for n in numbers if n < gap]
         after = [n for n in numbers if n > gap]
         neighbours |= {max(before)} if before else set()
         neighbours |= {min(after)} if after else set()
+    return missing, step, _calls_of(merged, neighbours)
+
+
+def _incomplete_rows_target(merged: MergedPO) -> str | None:
+    """The retry target if rows are visibly incomplete (gap, bad row, failed line call)."""
+    _, _, gap_calls = _gaps(merged)
+    calls = gap_calls | {e.call_id for e in merged.row_errors}
+    calls |= {c for c in merged.missing_calls if c != "H"}
+    return _target(False, calls)
+
+
+def check_continuity(merged: MergedPO) -> CheckResult:
+    """Rule 6: line numbers run 1, 2, 3 ... (or 10, 20, 30 ...) with no gaps."""
+    if not merged.items:
+        return CheckResult("continuity", False, ("line_items",), "no line items", "LI")
+    missing, step, calls = _gaps(merged)
+    if not missing:
+        return _passed("continuity", f"{len(merged.items)} rows, step {step}")
     detail = f"missing line numbers {missing[: MAX_DETAIL_ITEMS * 4]}"
     fields = tuple(_line_field(n) for n in missing)
-    return CheckResult(
-        "continuity", False, fields, detail, _target(False, _calls_of(merged, neighbours))
-    )
+    return CheckResult("continuity", False, fields, detail, _target(False, calls))
 
 
 def check_amount_in_words(merged: MergedPO) -> CheckResult:
