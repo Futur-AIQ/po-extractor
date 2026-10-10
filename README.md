@@ -130,6 +130,41 @@ timings, tokens per document). llama.cpp does not report reasoning tokens, so th
 from the reasoning text's share of the output and flagged `reasoning_estimated`. On the Mac the
 9B model with thinking on can take minutes per PO; the full baseline runs on the H100.
 
+## Running the optimised pipeline
+
+`app/extraction/` is the v1.1 pipeline: per-page native/scanned handling (text layer + image for
+native pages, image only for scanned ones), field-less T&C pages skipped, prefix-stable messages,
+compact short-key output, `adaptive` call planning (header + line items, line items per page for
+long POs), merge + computed taxes, the 10 validation rules, and one targeted retry of only the
+failed calls on `po-accurate` (thinking on). Every PO ends `completed`, `needs_review` or `failed`.
+
+The calls of a PO run in parallel, so the local model needs several slots and room for them:
+
+```bash
+PARALLEL=4 CTX_SIZE=65536 make model                    # terminal 1: 4 slots sharing 64k context
+make litellm                                            # terminal 2
+make extract SPLIT=dev VARIANTS=N,S,M STRATEGY=adaptive RUN=opt_dev_local   # terminal 3
+```
+
+`LIMIT=3` runs only the first 3 POs (each in every variant); `CONCURRENCY=4` (default) is the
+number of documents in flight, each with an increasing priority. Ablations go in `ARGS`:
+
+```bash
+make extract STRATEGY=two_call RUN=opt_two_call                      # or per_page
+make extract RUN=opt_text_only ARGS="--native-mode text"            # text+image | text | image
+make extract RUN=opt_dpi120    ARGS="--dpi 120 --no-retry --no-skip-pages"
+```
+
+Results use the standard run format: `outputs/` (full field names), `records.jsonl` (status,
+timings, tokens and routing: strategy, reason, retried calls) and `raw/` (every call's raw answer
+and the result envelope).
+
+On the Mac a line-item call on a long PO can take more than the default 120 s per request (about
+40 output tokens/s for the 9B model). For local runs set `LLM_TIMEOUT_S=300` and
+`LLM_TRANSIENT_RETRIES=1` in `.env`, and give LiteLLM a longer `request_timeout` in
+`infra/litellm/config.dev.yaml` than the app's timeout, so the app is the only layer that
+times out and retries.
+
 ## Evaluation
 
 ```bash

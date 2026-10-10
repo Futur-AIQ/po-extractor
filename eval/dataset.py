@@ -53,6 +53,17 @@ def load_dataset(
     ]
 
 
+def select_docs(
+    dataset_dir: Path, split: str | None, variants: tuple[str, ...], limit: int | None
+) -> list[DatasetDoc]:
+    """Documents of the split in manifest order, limited to the first `limit` POs."""
+    docs = load_dataset(dataset_dir, split, variants)
+    if limit is None:
+        return docs
+    base_ids = list(dict.fromkeys(doc.base_id for doc in docs))[:limit]
+    return [doc for doc in docs if doc.base_id in base_ids]
+
+
 def read_truth_po(doc: DatasetDoc) -> dict[str, Any]:
     """The ground-truth PO of a document, as JSON (full field names, Decimals as strings)."""
     return json.loads(doc.truth.read_text(encoding="utf-8"))["po"]

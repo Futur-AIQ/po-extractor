@@ -87,6 +87,7 @@ class DocRecord(BaseModel):
     tokens: TokenUsage = Field(default_factory=TokenUsage)
     calls: int = 0  # number of LLM calls
     error: str | None = None
+    routing: dict[str, Any] | None = None  # optimised pipeline: strategy, reason, retries
 
     @field_validator("timings_ms")
     @classmethod

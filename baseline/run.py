@@ -26,7 +26,7 @@ from baseline.pipeline import (
     BaselineSettings,
     extract_baseline,
 )
-from eval.dataset import VARIANTS, DatasetDoc, load_dataset
+from eval.dataset import VARIANTS, DatasetDoc, select_docs
 from eval.run_format import (
     DocRecord,
     RunConfig,
@@ -35,17 +35,6 @@ from eval.run_format import (
     current_git_commit,
     new_run_id,
 )
-
-
-def select_docs(
-    dataset_dir: Path, split: str | None, variants: tuple[str, ...], limit: int | None
-) -> list[DatasetDoc]:
-    """Documents of the split in manifest order, limited to the first `limit` POs."""
-    docs = load_dataset(dataset_dir, split, variants)
-    if limit is None:
-        return docs
-    base_ids = list(dict.fromkeys(doc.base_id for doc in docs))[:limit]
-    return [doc for doc in docs if doc.base_id in base_ids]
 
 
 def save_result(writer: RunWriter, doc: DatasetDoc, result: BaselineResult) -> DocRecord:

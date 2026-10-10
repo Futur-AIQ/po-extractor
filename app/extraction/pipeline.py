@@ -180,6 +180,30 @@ def _timeline(outcomes: list[CallOutcome], attempt: str) -> list[TimelineOut]:
     ]
 
 
+def _keep_raw(raw: list[dict[str, Any]] | None, outcomes: list[CallOutcome], attempt: str) -> None:
+    """Append each call's raw answer to `raw` (if given): content, reasoning, request body."""
+    if raw is None:
+        return
+    for o in outcomes:
+        result = o.result
+        raw.append(
+            {
+                "call_id": o.spec.call_id,
+                "attempt": attempt,
+                "alias": result.alias,
+                "status": "ok" if result.ok else result.error_kind,
+                "error": result.error,
+                "finish_reason": result.finish_reason,
+                "tokens": vars(result.tokens),
+                "duration_ms": result.timings.duration_ms,
+                "attempts": result.attempts,
+                "content": result.raw_content,
+                "reasoning": result.reasoning_content,
+                "request": result.request_body,  # without messages (page images)
+            }
+        )
+
+
 def _tokens(outcomes: list[CallOutcome], suffix: str = "") -> dict[str, dict[str, int | None]]:
     return {
         o.spec.call_id + suffix: {
@@ -218,6 +242,7 @@ async def extract(
     po_priority: int | None = None,
     masters: Masters | None = None,
     queue_ms: float = 0.0,
+    raw_calls: list[dict[str, Any]] | None = None,
 ) -> ResultEnvelope:
     """Extract one PO end to end (see module docstring). Never raises for a bad PDF or a
     failed call: those give status "failed".
@@ -225,6 +250,7 @@ async def extract(
     `po_priority`: the PO's arrival sequence number (smaller = served first by vLLM).
     `masters`: ERP master data; default: settings.masters_dir if present.
     `queue_ms`: time the job waited in the queue, for the timings.
+    `raw_calls`: if given, every call's raw answer is appended to it (for debugging runs).
     """
     start = time.perf_counter()
     job_id = job_id or uuid.uuid4().hex
@@ -256,6 +282,7 @@ async def extract(
 
     llm_start = time.perf_counter()
     outcomes = await run_calls(doc, plan.specs, po_priority, client, settings, po_start=start)
+    _keep_raw(raw_calls, outcomes, "first")
     timings["llm"] = _ms(llm_start)
     timings["llm_calls"] = {o.spec.call_id: o.result.timings.duration_ms for o in outcomes}
     timeline = _timeline(outcomes, "first")
@@ -312,6 +339,7 @@ async def extract(
             if spec.call_id in retry_ids
         ]
         retried = await run_calls(doc, specs, po_priority, client, settings, po_start=start)
+        _keep_raw(raw_calls, retried, "retry")
         timeline += _timeline(retried, "retry")
         tokens |= _tokens(retried, ":retry")
         routing.retried_calls += retry_ids

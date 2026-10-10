@@ -1,4 +1,4 @@
-.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100 doctor dataset scanned public-data baseline eval compare
+.PHONY: help install test lint format up down logs ping langfuse-up langfuse-down langfuse-logs model litellm litellm-h100 doctor dataset scanned public-data baseline extract eval compare
 
 COMPOSE := docker compose -f infra/docker-compose.yml
 
@@ -86,11 +86,21 @@ public-data:  ## Download Northwind (Hugging Face) and FATURA (Zenodo, ~690 MB) 
 SPLIT ?= dev
 VARIANTS ?= N,S
 LIMIT ?=
-CONCURRENCY ?= 1
+CONCURRENCY ?=  # documents in flight; empty = the CLI's default (baseline 1, extract 4)
 RUN_ID ?=
 baseline:  ## Baseline B0 run, e.g. make baseline SPLIT=dev VARIANTS=N,S LIMIT=3 [RUN_ID=b0_dev_local]
 	uv run python -m baseline.run --split $(SPLIT) --variants $(VARIANTS) \
-		--concurrency $(CONCURRENCY) $(if $(LIMIT),--limit $(LIMIT)) $(if $(RUN_ID),--run-id $(RUN_ID))
+		$(if $(CONCURRENCY),--concurrency $(CONCURRENCY)) $(if $(LIMIT),--limit $(LIMIT)) \
+		$(if $(RUN_ID),--run-id $(RUN_ID))
+
+# Optimised pipeline (needs `PARALLEL=4 CTX_SIZE=65536 make model` and `make litellm`).
+# Ablations go in ARGS, e.g. ARGS="--dpi 120 --native-mode text --no-retry --no-skip-pages".
+STRATEGY ?= adaptive
+ARGS ?=
+extract:  ## Optimised run, e.g. make extract SPLIT=dev VARIANTS=N,S,M STRATEGY=adaptive RUN=opt_dev_local
+	uv run python -m app.extraction.run --split $(SPLIT) --variants $(VARIANTS) \
+		--strategy $(STRATEGY) $(if $(CONCURRENCY),--concurrency $(CONCURRENCY)) \
+		$(if $(LIMIT),--limit $(LIMIT)) $(if $(RUN),--run-id $(RUN)) $(ARGS)
 
 eval:  ## Score a run and write report.md/json + errors.csv, e.g. make eval RUN=runs/oracle_dev
 	@test -n "$(RUN)" || { echo "usage: make eval RUN=runs/<run_id>"; exit 2; }
