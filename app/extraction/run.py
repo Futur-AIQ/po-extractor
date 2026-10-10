@@ -22,6 +22,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+from app.common.stats import percentile
 from app.core.settings import Settings, get_settings
 from app.extraction.llm_client import LlmClient
 from app.extraction.orchestrator import LlmCaller
@@ -37,7 +38,6 @@ from eval.run_format import (
     current_git_commit,
     new_run_id,
 )
-from eval.score import percentile
 
 
 def token_usage(env: ResultEnvelope) -> TokenUsage:

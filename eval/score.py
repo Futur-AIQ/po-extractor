@@ -28,6 +28,7 @@ from typing import Any
 
 from rapidfuzz import fuzz
 
+from app.common.stats import percentile
 from eval.dataset import DatasetDoc, load_dataset, read_truth_po
 from eval.normalize import FIELD_TYPES, FieldType, normalize
 from eval.run_format import DocRecord, read_output, read_records
@@ -425,17 +426,6 @@ def group_by(scores: list[DocScore], key: Callable[[DocScore], str]) -> dict[str
 # =========================================================================================
 # Latency and tokens (records.jsonl)
 # =========================================================================================
-
-
-def percentile(values: list[float], q: float) -> float | None:
-    """q-th percentile (0-100) with linear interpolation; None for no values."""
-    if not values:
-        return None
-    ordered = sorted(values)
-    rank = (len(ordered) - 1) * q / 100
-    low = int(rank)
-    high = min(low + 1, len(ordered) - 1)
-    return ordered[low] + (ordered[high] - ordered[low]) * (rank - low)
 
 
 def _mean(values: list[float]) -> float | None:
